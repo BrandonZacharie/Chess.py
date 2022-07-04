@@ -1,0 +1,11 @@
+# runtime
+semver~=3.0.2
+
+# development
+coverage~=7.4.3
+pytest~=8.1.1
+
+# build
+black
+isort
+mypy
