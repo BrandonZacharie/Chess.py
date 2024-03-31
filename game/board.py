@@ -95,7 +95,7 @@ class Piece(ABC):
 
     @staticmethod
     @abstractmethod
-    def symbol(team: Team):
+    def symbol(team: Team) -> str:
         raise NotImplementedError
 
     def can_take(self, cell: Cell) -> bool:

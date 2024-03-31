@@ -4,7 +4,7 @@ from typing import Any, Callable, List, Optional, Sequence, Tuple, Type
 from pytest import mark, raises
 from semver import VersionInfo
 
-from game import Cell, Direction, Game, Knight, Pawn, Query, Team, Turn
+from game import Cell, Direction, FileType, Game, Knight, Pawn, Query, Team, Turn
 from game.error import IllegalMoveError, IllegalMoveOutOfTurnError
 from game.queen import Queen
 
@@ -93,7 +93,7 @@ def test_save(version: int):
 
 
 @mark.parametrize("version", [2, 1])
-def test_load(version: int):
+def test_load_json(version: int):
     def reload(game: Game) -> Game:
         with NamedTemporaryFile() as f:
             game.save(f.name, version=version)
@@ -156,7 +156,9 @@ def test_load(version: int):
         ([("A1", "Queen")], IllegalMoveError),
     ),
 )
-def test_load_invalid_log(logs: Sequence[Tuple[str, Any]], exception: Type[Exception]):
+def test_load_json_invalid_log(
+    logs: Sequence[Tuple[str, Any]], exception: Type[Exception]
+):
     game = Game()
 
     for a, b in logs:
@@ -174,7 +176,7 @@ def test_load_invalid_log(logs: Sequence[Tuple[str, Any]], exception: Type[Excep
             Game().load(f.name)
 
 
-def test_load_unsupported_version():
+def test_load_json_unsupported_version():
     game = Game()
 
     game.move("A2", "A3")
@@ -194,6 +196,13 @@ def test_load_unsupported_version():
 
         with raises(ValueError):
             Game().load(f.name)
+
+
+@mark.parametrize("filename", ["../tests/test1.pgn", "../tests/test2.pgn"])
+def test_load_pgn(filename: str):
+    game = Game()
+
+    game.load(filename=filename, filetype=FileType.PGN)
 
 
 def test_notify():

@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import datetime
 from enum import Enum
 from json import dumps, loads
+from os import getcwd, path
 from typing import (
     Any,
     Callable,
@@ -17,6 +18,7 @@ from typing import (
     cast,
 )
 
+from pgn import loads as pgn_loads  # type: ignore
 from semver import VersionInfo
 
 from .board import (
@@ -55,6 +57,11 @@ class Turn(Enum):
     AUTO: Optional[Team] = None
     WHITE = Team.WHITE
     BLACK = Team.BLACK
+
+
+class FileType(Enum):
+    PGN = "pgn"
+    JSON = "json"
 
 
 class Game:
@@ -150,52 +157,172 @@ class Game:
 
         return True
 
-    def load(self, filename: str):
-        with open(filename, "r") as f:
-            s = f.read()
-            data = loads(s)
-            version_info = VersionInfo.parse(data["fileVersion"])
-            game = Game()
-            game._created = datetime.fromisoformat(data["created"])
+    def load(self, filename: str, filetype: FileType = FileType.JSON):
+        game = Game()
+        is_loaded = False
 
-            match version_info.major:
-                case 1:
-                    types: List[Type[Piece]] = [Pawn, Rook, Knight, Bishop, Queen, King]
-                    type_map: Dict[str, Type[Piece]] = {t.__name__: t for t in types}
-                    game._board = Board(False)
+        match filetype:
+            case FileType.PGN:
+                realpath = path.realpath(path.join(getcwd(), path.dirname(__file__)))
+                pgn_games = pgn_loads(open(path.join(realpath, filename)).read())
+                PIECE_TYPE_MAP: dict[str, Type[Piece]] = {
+                    "K": King,
+                    "Q": Queen,
+                    "B": Bishop,
+                    "N": Knight,
+                    "R": Rook,
+                }
 
-                    for y, cells in enumerate(cast(BoardSerializable, data["board"])):
-                        for x, piece in enumerate(cells):
-                            if piece is not None:
-                                kind = str(piece["kind"])
-                                team = Team(bool(piece["team"]))
-                                has_moved = bool(piece["has_moved"])
-                                game.board[y][x].piece = type_map[kind](team, has_moved)
-                case 2:
-                    log: Log[List] = Log(data["log"])
-                    size = len(log)
+                def find_cells(
+                    cls: type[Piece], team: Team, file: Optional[str], destination: str
+                ) -> List[Cell]:
+                    return [
+                        cell
+                        for cells in game.board
+                        for cell in cells
+                        if cell.piece is not None
+                        and isinstance(cell.piece, cls)
+                        and cell.piece.team is team
+                        and cell.piece.can_take(game.cell(destination))
+                        and (file is None or cell.name[0] == file)
+                    ]
 
-                    if size > 0:
-                        cell = game.cell(log.entry(0)[0])
+                def parse_move(pgn_move: str) -> Optional[Tuple[Query, Query]]:
+                    if pgn_move[0] == "{":
+                        return None
 
-                        if cell.piece is None:
-                            raise ValueError("Invalid log entry")
+                    team = Team.BLACK if game.turn == Turn.BLACK else Team.WHITE
 
-                        game._first_turn = Turn(cell.piece.team)
+                    match pgn_move:
+                        case "O-O":
+                            return ("E8", "G8") if team == Team.BLACK else ("E1", "G1")
+                        case "O-O-O":
+                            return ("E8", "C8") if team == Team.BLACK else ("E1", "C1")
+                        case "0-1" | "1-0" | "1/2-1/2":
+                            return None
 
-                        for i in range(size):
-                            entry = log.entry(i)
-                            a, b = entry
+                    p: type[Piece]
 
-                            if isinstance(b, str):
-                                game.promote(a, PIECE_NAME_TYPE_MAP.get(b, Pawn))
+                    match len(pgn_move):
+                        case 2:
+                            p = Pawn
+                            q2 = pgn_move.upper()
+                            q1 = find_cells(p, team, q2[0], q2)[0].name
+
+                            return q1, q2
+                        case 3:
+                            p = PIECE_TYPE_MAP[pgn_move[0]]
+                            q2 = pgn_move[1].upper() + pgn_move[2]
+                            q1 = find_cells(p, team, None, q2)[0].name
+
+                            return q1, q2
+                        case 4 | 5:
+                            if pgn_move[-1] == "+":
+                                return parse_move(pgn_move[:-1])
+
+                            if pgn_move[1] == "x":
+                                if not pgn_move[0].islower():
+                                    return parse_move(pgn_move[0] + pgn_move[2:])
+
+                                p = Pawn
+                                f = pgn_move[0].upper()
                             else:
-                                game.move(a, b)
-                case _:
-                    raise ValueError("Unsupported version")
+                                p = PIECE_TYPE_MAP[pgn_move[0]]
+                                f = pgn_move[1].upper()
 
-        Game.__init__(self, game)
-        self.notify("load")
+                            q2 = pgn_move[2].upper() + pgn_move[3]
+                            q1 = find_cells(p, team, f, q2)[0].name
+
+                            return q1, q2
+
+                    raise ValueError
+
+                if len(pgn_games) > 0:
+                    is_loaded = True
+                    can_parse = True
+
+                    for pgn_move in pgn_games[-1].moves:
+                        if not can_parse:
+                            continue
+
+                        if pgn_move == "(":
+                            can_parse = False
+
+                            continue
+
+                        if pgn_move == ")":
+                            can_parse = True
+
+                            continue
+
+                        move = parse_move(pgn_move)
+
+                        if move is not None:
+                            game.move(move[0], move[1])
+
+            case FileType.JSON:
+                with open(filename, "r") as f:
+                    s = f.read()
+                    data = loads(s)
+                    version_info = VersionInfo.parse(data["fileVersion"])
+                    game = Game()
+                    game._created = datetime.fromisoformat(data["created"])
+                    is_loaded = True
+
+                    match version_info.major:
+                        case 1:
+                            types: List[Type[Piece]] = [
+                                Pawn,
+                                Rook,
+                                Knight,
+                                Bishop,
+                                Queen,
+                                King,
+                            ]
+                            type_map: Dict[str, Type[Piece]] = {
+                                t.__name__: t for t in types
+                            }
+                            game._board = Board(False)
+
+                            for y, cells in enumerate(
+                                cast(BoardSerializable, data["board"])
+                            ):
+                                for x, piece in enumerate(cells):
+                                    if piece is not None:
+                                        kind = str(piece["kind"])
+                                        team = Team(bool(piece["team"]))
+                                        has_moved = bool(piece["has_moved"])
+                                        game.board[y][x].piece = type_map[kind](
+                                            team, has_moved
+                                        )
+                        case 2:
+                            log: Log[List] = Log(data["log"])
+                            size = len(log)
+
+                            if size > 0:
+                                cell = game.cell(log.entry(0)[0])
+
+                                if cell.piece is None:
+                                    raise ValueError("Invalid log entry")
+
+                                game._first_turn = Turn(cell.piece.team)
+
+                                for i in range(size):
+                                    entry = log.entry(i)
+                                    a, b = entry
+
+                                    if isinstance(b, str):
+                                        game.promote(
+                                            a, PIECE_NAME_TYPE_MAP.get(b, Pawn)
+                                        )
+                                    else:
+                                        game.move(a, b)
+                        case _:
+                            raise ValueError("Unsupported version")
+
+        if is_loaded:
+            Game.__init__(self, game)
+            self.notify("load")
 
     def loads(self, s: str):
         board = Board(initialize=False)

@@ -1,5 +1,6 @@
 # runtime
 semver~=3.0.2
+pgnparser~=1.0.0
 
 # development
 coverage~=7.4.3
