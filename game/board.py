@@ -243,6 +243,7 @@ class Board(List[List[Cell]]):
             template = [[None] * 8 for _ in range(8)]
 
         self.log = Log[LogEntry]()
+        self.captures: Dict[Team, List[Piece]] = {Team.BLACK: [], Team.WHITE: []}
 
         def make_cell(x: int, y: int, t: Optional[Type[Piece]]) -> Cell:
             cell = Cell(x, y, self)
@@ -317,6 +318,9 @@ class Board(List[List[Cell]]):
             pass
 
         piece.has_moved = True
+
+        if old_piece is not None:
+            self.captures[old_piece.team].append(old_piece)
 
     def try_move_piece(self, piece: Piece, cell: Cell) -> bool:
         try:
