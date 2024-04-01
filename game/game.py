@@ -47,7 +47,20 @@ Query: TypeAlias = Cell | Piece | str | Tuple[int | str, int | str]
 Handler: TypeAlias = Callable[["Game", Tuple[Any, ...]], None]
 
 PIECE_NAME_TYPE_MAP: dict[str, Type[Piece]] = {
-    str(t): cast(Type[Piece], t) for t in (King, Queen, Bishop, Knight, Rook, Pawn)
+    "K": King,
+    "Q": Queen,
+    "B": Bishop,
+    "N": Knight,
+    "R": Rook,
+    "P": Pawn,
+}
+PIECE_TYPE_NAME_MAP: dict[Type[Piece], str] = {
+    King: "K",
+    Queen: "Q",
+    Bishop: "B",
+    Knight: "N",
+    Rook: "R",
+    Pawn: "P",
 }
 
 
@@ -165,13 +178,6 @@ class Game:
             case FileType.PGN:
                 realpath = path.realpath(path.join(getcwd(), path.dirname(__file__)))
                 pgn_games = pgn_loads(open(path.join(realpath, filename)).read())
-                PIECE_TYPE_MAP: dict[str, Type[Piece]] = {
-                    "K": King,
-                    "Q": Queen,
-                    "B": Bishop,
-                    "N": Knight,
-                    "R": Rook,
-                }
 
                 def find_cells(
                     cls: type[Piece], team: Team, file: Optional[str], destination: str
@@ -211,7 +217,7 @@ class Game:
 
                             return q1, q2
                         case 3:
-                            p = PIECE_TYPE_MAP[pgn_move[0]]
+                            p = PIECE_NAME_TYPE_MAP[pgn_move[0]]
                             q2 = pgn_move[1].upper() + pgn_move[2]
                             q1 = find_cells(p, team, None, q2)[0].name
 
@@ -227,7 +233,7 @@ class Game:
                                 p = Pawn
                                 f = pgn_move[0].upper()
                             else:
-                                p = PIECE_TYPE_MAP[pgn_move[0]]
+                                p = PIECE_NAME_TYPE_MAP[pgn_move[0]]
                                 f = pgn_move[1].upper()
 
                             q2 = pgn_move[2].upper() + pgn_move[3]
@@ -312,9 +318,7 @@ class Game:
                                     a, b = entry
 
                                     if isinstance(b, str):
-                                        game.promote(
-                                            a, PIECE_NAME_TYPE_MAP.get(b, Pawn)
-                                        )
+                                        game.promote(PIECE_NAME_TYPE_MAP[b])
                                     else:
                                         game.move(a, b)
                         case _:
@@ -427,11 +431,10 @@ class Game:
         self.board.log.append((cell1.point, cell2.point))
         self.notify("move")
 
-    def promote(self, q: Query, t: Type[Piece]):
-        cell = self.cell(q)
-        promotable = self.board.get_promotable()
+    def promote(self, t: Type[Piece]):
+        cell = self.board.get_promotable()
 
-        if cell != promotable:
+        if cell is None:
             raise IllegalMoveError("cannot promote", cell)
 
         if cell.piece is None or not isinstance(cell.piece, Pawn) or t in (Pawn, King):
@@ -439,7 +442,7 @@ class Game:
 
         cell.piece = t(cell.piece.team, has_moved=True)
 
-        self.board.log.append((cell.point, str(t)))
+        self.board.log.append((cell.point, PIECE_TYPE_NAME_MAP[t]))
         self.notify("promote")
 
     def moves(self, q: Query) -> Set[Cell]:

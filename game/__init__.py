@@ -3,7 +3,7 @@ import game.board
 
 from .bishop import Bishop
 from .board import Board, Cell, Direction, Piece, Team
-from .game import FileType, Game, Query, Turn
+from .game import PIECE_NAME_TYPE_MAP, FileType, Game, Query, Turn
 from .king import King
 from .knight import Knight
 from .pawn import Pawn
@@ -21,6 +21,7 @@ __all__ = [
     "Knight",
     "Pawn",
     "Piece",
+    "PIECE_NAME_TYPE_MAP",
     "Queen",
     "Query",
     "Rook",

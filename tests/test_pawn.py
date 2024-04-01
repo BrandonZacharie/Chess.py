@@ -84,7 +84,7 @@ def test_promote():
     ):
         game.move(*move)
 
-    game.promote("D1", Queen)
+    game.promote(Queen)
 
 
 def test_illegal_promote():
@@ -104,7 +104,7 @@ def test_illegal_promote():
         game.move(*move)
 
     with raises(IllegalMoveError):
-        game.promote("D1", Queen)
+        game.promote(Queen)
 
     game.move((2, 6), (3, 7))
 
@@ -112,10 +112,10 @@ def test_illegal_promote():
         game.move("D5", "D6")
 
     with raises(IllegalPromotionTypeError):
-        game.promote("D1", Pawn)
+        game.promote(Pawn)
 
     with raises(IllegalPromotionTypeError):
-        game.promote("D1", King)
+        game.promote(King)
 
 
 def test_en_passant():
@@ -152,6 +152,6 @@ def test_en_passant():
     game.move("B6", "B7")
     game.move("A8", "A7")
     game.move("B7", "B8")
-    game.promote("B8", Queen)
+    game.promote(Queen)
 
     assert game.moves("C4") == game.cells("C3")

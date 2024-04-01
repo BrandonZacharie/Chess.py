@@ -139,7 +139,7 @@ def test_load_json(version: int):
         game.move("C3", "C2")
         game.move("D1", "D2")
         game.move("C2", "C1")
-        game.promote("C1", Queen)
+        game.promote(Queen)
 
         game = reload(game)
 
@@ -153,7 +153,7 @@ def test_load_json(version: int):
         ([("A2", "A3"), ("A4", "A5")], IllegalMoveError),
         ([("A4", "A5")], ValueError),
         ([("A4", 2)], ValueError),
-        ([("A1", "Queen")], IllegalMoveError),
+        ([("A1", "Q")], IllegalMoveError),
     ),
 )
 def test_load_json_invalid_log(
