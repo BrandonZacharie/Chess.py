@@ -8,7 +8,7 @@ from game.error import (
     IllegalMoveThroughPieceError,
 )
 
-from .board import Cell, Piece, Team
+from .board import Cell, Direction, Piece, Team
 
 
 class Pawn(Piece):
@@ -41,9 +41,17 @@ class Pawn(Piece):
         if dy > 2 or dx >= 1 and dy > 1:
             raise IllegalMoveSpacesMoreThanTwoError(self.cell, cell)
 
-        if dy == 2 and self.has_moved:
-            # can't move 2 spaces after having moved
-            raise IllegalMoveSpacesMoreThanOneError(self.cell, cell)
+        if dy == 2:
+            if self.has_moved:
+                # can't move 2 spaces after having moved
+                raise IllegalMoveSpacesMoreThanOneError(self.cell, cell)
+
+            direction = Direction.UP if y < 0 else Direction.DOWN
+            cells = self.cell.board.get_cells(self.cell, direction, 2)
+
+            for c in cells[1:]:
+                if c.piece is not None:
+                    raise IllegalMoveThroughPieceError(self.cell, cell, c)
 
         if cell.piece is None:
             if dx == 1 and dy == 1:
@@ -52,7 +60,7 @@ class Pawn(Piece):
                 if not isinstance(piece, Pawn) or not piece.is_en_passant():
                     raise IllegalMoveDirectionDiagonalError(self.cell, cell)
         else:
-            if dx == 0 and dy == 1:
+            if dx == 0 and dy > 0:
                 # can't vertically take a piece
                 raise IllegalMoveThroughPieceError(self.cell, cell, cell)
 

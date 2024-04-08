@@ -5,6 +5,7 @@ from pytest import raises
 from game import Game, King, Pawn, Queen, Turn
 from game.error import (
     IllegalMoveError,
+    IllegalMoveThroughPieceError,
     IllegalMoveWhilePromotingError,
     IllegalPromotionTypeError,
 )
@@ -65,6 +66,43 @@ def test_illegal_move_take_own_piece():
 
     with raises(IllegalMoveError):
         game.move("B3", "A4")
+
+
+def test_illegal_intial_move():
+    game = Game()
+
+    # Felber, Joesph J vs. Nakamura, Hikaru; New York, 1998
+
+    game.move("E2", "E4")
+    game.move("C7", "C5")
+    game.move("G1", "F3")
+    game.move("B8", "C6")
+    game.move("D2", "D4")
+    game.move("C5", "D4")
+    game.move("F3", "D4")
+    game.move("G8", "F6")
+    game.move("B1", "C3")
+    game.move("E7", "E5")
+    game.move("D4", "B5")
+    game.move("D7", "D6")
+    game.move("C1", "G5")
+    game.move("A7", "A6")
+    game.move("G5", "F6")
+    game.move("G7", "F6")
+    game.move("B5", "A3")
+    game.move("B7", "B5")
+    game.move("C3", "D5")
+    game.move("F8", "E7")
+    game.move("G2", "G3")
+    game.move("C8", "E6")
+    game.move("F1", "G2")
+    game.move("A8", "C8")
+    game.move("C2", "C3")
+    game.move("E8", "G8")
+    game.move("A3", "C2")
+
+    with raises(IllegalMoveThroughPieceError):
+        game.move("F7", "F5")
 
 
 def test_promote():
