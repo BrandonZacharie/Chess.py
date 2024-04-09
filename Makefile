@@ -20,7 +20,7 @@ else \
 	( \
 		source .venv/bin/activate; \
 		coverage run -m pytest -xsvv; \
-    ) \
+	) \
 fi
 
 report: test

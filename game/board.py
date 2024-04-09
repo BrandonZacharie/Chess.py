@@ -22,10 +22,10 @@ PieceSerializable: TypeAlias = Dict[str, str | bool]
 CellSerializable: TypeAlias = Optional[PieceSerializable]
 BoardSerializable: TypeAlias = List[List[CellSerializable]]
 Point: TypeAlias = Tuple[int, int]
-Move: TypeAlias = Tuple[Point, Point]
-Event: TypeAlias = Tuple[Point, str]
-LogEntry = Union[Move, Event]
-ST = TypeVar("ST", bound=Sequence[Point] | Event)
+LogMove: TypeAlias = Tuple[Point, Point]
+LogEvent: TypeAlias = Tuple[Point, str]
+LogEntry: TypeAlias = Union[LogMove, LogEvent]
+ST = TypeVar("ST", bound=Sequence[Point] | LogEvent)
 
 
 class Direction(Enum):
@@ -121,7 +121,7 @@ class Log(Generic[ST], List[ST]):
         a1, b1 = e1
 
         if isinstance(e2, str):
-            return cast(Event, ((a1, b1), e2))
+            return cast(LogEvent, ((a1, b1), e2))
 
         if isinstance(e2, Sequence):
             # Pick the first two values.
@@ -130,7 +130,7 @@ class Log(Generic[ST], List[ST]):
             if isinstance(a2, int) and isinstance(b2, int):
 
                 # Return only the exact shape as is the return type.
-                return cast(Move, ((a1, b1), (a2, b2)))
+                return cast(LogMove, ((a1, b1), (a2, b2)))
 
         raise ValueError
 
@@ -196,20 +196,58 @@ class Cell:
     def is_safe(self, team: Team) -> bool:
         return self.board.is_safe_cell(self, team)
 
-    def up(self, distance: int) -> Cell:
+    def up(self, distance: int = 1) -> Cell:
         return self.board[self.y - distance][self.x]
 
-    def down(self, distance: int) -> Cell:
+    def down(self, distance: int = 1) -> Cell:
         return self.board[self.y + distance][self.x]
 
     def left(self, distance: int = 1) -> Cell:
         return self.board[self.y][self.x - distance]
 
-    def right(self, distance: int) -> Cell:
+    def right(self, distance: int = 1) -> Cell:
         return self.board[self.y][self.x + distance]
 
     def serializable(self) -> CellSerializable:
         return None if self.piece is None else self.piece.serializable()
+
+
+class Move:
+    def __init__(self, original_piece: Piece, destination_cell: Cell, taken_cell: Cell):
+        self.original_piece = original_piece
+        self.original_cell = original_piece.cell
+        self.destination_cell = destination_cell
+        self.taken_cell = taken_cell
+        self.taken_piece: Optional[Piece] = None
+        self.has_moved = original_piece.has_moved
+        self.is_castling = (
+            original_piece.is_castling if isinstance(original_piece, King) else False
+        )
+
+    def perform(self) -> None:
+        if self.taken_cell.piece is not None:
+            if isinstance(self.taken_cell.piece, King):
+                raise ValueError
+
+            self.taken_piece = self.taken_cell.piece
+
+        self.taken_cell.piece = None
+        self.destination_cell.piece = self.original_piece
+        self.original_piece.has_moved = True
+
+        if self.original_cell is not None:
+            self.original_cell.piece = None
+
+    def reverse(self) -> None:
+        if self.original_cell is not None:
+            self.original_cell.piece = self.original_piece
+
+        if isinstance(self.original_piece, King):
+            self.original_piece.is_castling = self.is_castling
+
+        self.destination_cell.piece = None
+        self.taken_cell.piece = self.taken_piece
+        self.original_piece.has_moved = self.has_moved
 
 
 from .bishop import Bishop
@@ -289,21 +327,29 @@ class Board(List[List[Cell]]):
 
         return True
 
-    def move_piece(self, piece: Piece, cell: Cell):
+    def move_piece(self, piece: Piece, cell: Cell) -> Move:
         piece.check_take(cell)
 
-        old_piece = cell.piece
-        old_cell = piece.cell
-        cell.piece = piece
+        is_en_passant = (
+            isinstance(piece, Pawn)
+            and piece.cell is not None
+            and abs(cell.y - piece.cell.y) == 1
+            and abs(cell.x - piece.cell.x) == 1
+            and cell.piece is None
+        )
+        move = Move(
+            piece,
+            cell,
+            cell if not is_en_passant else cell.up() if piece.is_black else cell.down(),
+        )
 
         try:
+            move.perform()
+
             king = self.get_king(piece.team)
 
             if not king.is_safe:
-                cell.piece = old_piece
-
-                if old_cell is not None:
-                    old_cell.piece = piece
+                move.reverse()
 
                 from .error import IllegalMoveThroughCheckError, IllegalMoveToCheckError
 
@@ -317,14 +363,19 @@ class Board(List[List[Cell]]):
         except IndexError:
             pass
 
-        piece.has_moved = True
+        if move.taken_piece is not None and isinstance(move.taken_piece, King):
+            raise ValueError
 
-        if old_piece is not None:
-            self.captures[old_piece.team].append(old_piece)
+        if move.taken_piece is not None:
+            self.captures[move.taken_piece.team].append(move.taken_piece)
+
+        return move
 
     def try_move_piece(self, piece: Piece, cell: Cell) -> bool:
         try:
-            return self.move_piece(piece, cell)
+            self.move_piece(piece, cell)
+
+            return True
         except:
             return False
 

@@ -158,13 +158,13 @@ def test_pawn_white_move_invalid():
 
     board.move_piece(pawn, pawn.cell.up(2))
 
-    assert not board.try_move_piece(pawn, pawn.cell.left(1))
-    assert not board.try_move_piece(pawn, pawn.cell.right(1))
-    assert not board.try_move_piece(pawn, pawn.cell.down(1))
-    assert not board.try_move_piece(pawn, pawn.cell.down(1).left(1))
-    assert not board.try_move_piece(pawn, pawn.cell.down(1).right(1))
-    assert not board.try_move_piece(pawn, pawn.cell.up(1).left(1))
-    assert not board.try_move_piece(pawn, pawn.cell.up(1).right(1))
+    assert not board.try_move_piece(pawn, pawn.cell.left())
+    assert not board.try_move_piece(pawn, pawn.cell.right())
+    assert not board.try_move_piece(pawn, pawn.cell.down())
+    assert not board.try_move_piece(pawn, pawn.cell.down().left())
+    assert not board.try_move_piece(pawn, pawn.cell.down().right())
+    assert not board.try_move_piece(pawn, pawn.cell.up().left())
+    assert not board.try_move_piece(pawn, pawn.cell.up().right())
 
     for y, r in enumerate(template):
         for x, t in enumerate(r):

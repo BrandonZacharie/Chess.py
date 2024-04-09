@@ -202,7 +202,12 @@ def test_load_json_unsupported_version():
 def test_load_pgn(filename: str):
     game = Game()
 
-    game.load(filename=filename, filetype=FileType.PGN)
+    game.load(filename, FileType.PGN)
+
+
+@mark.parametrize("filename", ["../tests/Nakamura.pgn", "../tests/Carlsen.pgn"])
+def test_parse_pgn(filename: str):
+    games = Game().parse_pgn(filename)
 
 
 def test_notify():

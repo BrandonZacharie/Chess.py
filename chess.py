@@ -9,7 +9,7 @@ from curses import (
     panel,
     wrapper,
 )
-from typing import TYPE_CHECKING, Callable, List, Tuple, TypeAlias, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, TypeAlias
 
 from cli import draw_foot, draw_head, run
 
@@ -99,11 +99,14 @@ class Chess(object):
             ("JSON", self.load_json),
         ]
 
-        Menu([
-            ("new game", self.play),
-            ("load file", Menu(load_items, window).display),
-            ("about", self.draw_about),
-        ], window).display()
+        Menu(
+            [
+                ("new game", self.play),
+                ("load file", Menu(load_items, window).display),
+                ("about", self.draw_about),
+            ],
+            window,
+        ).display()
 
     def play(self):
         run()
