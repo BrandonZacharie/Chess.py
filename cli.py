@@ -1,9 +1,10 @@
-from curses import A_BOLD, A_COLOR, A_UNDERLINE, curs_set, wrapper
+from curses import A_BOLD, A_UNDERLINE, KEY_DOWN, KEY_ENTER, KEY_UP, curs_set, wrapper
+from curses.ascii import ESC
 from enum import Enum
 from typing import TYPE_CHECKING, List, Optional, Tuple, cast
 
 from game import PIECE_NAME_TYPE_MAP, Board, Game, Team
-from game.board import Event, Move
+from game.board import LogEvent, LogMove
 from game.error import IllegalMoveError
 
 if TYPE_CHECKING:
@@ -25,12 +26,6 @@ class InputMode(Enum):
 
 def draw_head(window: CursesWindow):
     window.addstr(2, 5, " Chess.py ", A_BOLD | A_UNDERLINE)
-
-
-def draw_foot(window: CursesWindow, y: int = 34):
-    window.addstr(y, 6, f"© 2021 Brandon Zacharie", A_COLOR)
-    window.addstr(y + 1, 6, "github: BrandonZacharie/Chess.py", A_COLOR)
-    window.addstr(y + 2, 6, f"semver: {Game.VERSION}", A_COLOR)
 
 
 def draw_board(window: CursesWindow, board: Board):
@@ -66,13 +61,13 @@ def draw_log(window: CursesWindow, board: Board):
 
         for entry in board.log:
             if type(entry[1]) is tuple:
-                move = cast(Move, entry)
+                move = cast(LogMove, entry)
 
                 log.append([f"{get_cell_name(move[0])}:{get_cell_name(move[1])}"])
 
                 moves += 1
             else:
-                event = cast(Event, entry)
+                event = cast(LogEvent, entry)
 
                 log[moves - 1].append(f"{get_cell_name(event[0])}:^{event[1]}")
 
@@ -197,11 +192,19 @@ def get_input(window: CursesWindow, mode: InputMode) -> List[int]:
         case InputMode.SELECT_PROM:
             count = 1
 
-    for _ in range(count):
+    while count > 0:
         ch = window.getch()
+
+        if ch in [KEY_DOWN, KEY_ENTER, KEY_UP]:
+            continue
+
+        if ch == ESC:
+            raise KeyboardInterrupt
 
         draw_input(window, mode, ch)
         input.append(ch)
+
+        count -= 1
 
     return input
 
@@ -216,7 +219,6 @@ def main(window: CursesWindow):
     curs_set(2)
 
     draw_head(window)
-    draw_foot(window)
     draw_board(window, game.board)
 
     while True:
@@ -224,7 +226,13 @@ def main(window: CursesWindow):
         draw_input_prompt(window, mode)
         draw_input_cursor(window, mode, q1 if mode is InputMode.SELECT_DEST else None)
 
-        input = "".join([chr(ch) for ch in get_input(window, mode)]).upper()
+        try:
+            input = "".join([chr(ch) for ch in get_input(window, mode)]).upper()
+        except KeyboardInterrupt:
+            window.clear()
+            curs_set(0)
+
+            return
 
         match mode:
             case InputMode.SELECT_CELL:

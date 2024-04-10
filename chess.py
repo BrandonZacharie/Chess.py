@@ -1,4 +1,5 @@
 from curses import (
+    A_COLOR,
     A_NORMAL,
     A_REVERSE,
     KEY_DOWN,
@@ -11,7 +12,7 @@ from curses import (
 )
 from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, TypeAlias
 
-from cli import draw_foot, draw_head, run
+from cli import Game, draw_head, main
 
 if TYPE_CHECKING:
     from _curses import _CursesWindow
@@ -39,7 +40,7 @@ class Menu(object):
         self.position = 0
         self.items = items
 
-        self.items.append(("quit", None))
+        self.items.append(("exit", None))
 
     def navigate(self, n):
         self.position += n
@@ -85,6 +86,7 @@ class Menu(object):
         self.panel.hide()
         panel.update_panels()
         doupdate()
+        draw_head(self.window)
 
 
 class Chess(object):
@@ -94,25 +96,27 @@ class Chess(object):
         curs_set(0)
         draw_head(window)
 
-        load_items: MenuItems = [
-            ("PGN", self.load_pgn),
-            ("JSON", self.load_json),
-        ]
-
         Menu(
             [
                 ("new game", self.play),
-                ("load file", Menu(load_items, window).display),
+                ("load file", self.load),
                 ("about", self.draw_about),
             ],
             window,
         ).display()
 
     def play(self):
-        run()
+        main(self.window)
 
     def load(self):
-        pass
+        draw_head(self.window)
+        Menu(
+            [
+                ("PGN", self.load_pgn),
+                ("JSON", self.load_json),
+            ],
+            self.window,
+        ).display()
 
     def load_pgn(self):
         pass
@@ -121,10 +125,14 @@ class Chess(object):
         pass
 
     def draw_about(self):
+        y = 4
+
         self.window.clear()
         draw_head(self.window)
-        draw_foot(self.window, 4)
-        self.window.addstr(8, 6, "Press any key to continue...")
+        self.window.addstr(y + 0, 6, f"© 2021 Brandon Zacharie", A_COLOR)
+        self.window.addstr(y + 2, 6, "github: BrandonZacharie/Chess.py", A_COLOR)
+        self.window.addstr(y + 3, 6, f"semver: {Game.VERSION}", A_COLOR)
+        self.window.addstr(y + 5, 6, "Press any key to continue...")
         self.window.getch()
         self.window.clear()
 
