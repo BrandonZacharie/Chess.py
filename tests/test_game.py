@@ -4,7 +4,18 @@ from typing import Any, Callable, List, Optional, Sequence, Tuple, Type
 from pytest import mark, raises
 from semver import VersionInfo
 
-from game import Cell, Direction, FileType, Game, Knight, Pawn, Query, Team, Turn
+from game import (
+    PIECE_NAME_TYPE_MAP,
+    Cell,
+    Direction,
+    FileType,
+    Game,
+    Knight,
+    Pawn,
+    Query,
+    Team,
+    Turn,
+)
 from game.error import IllegalMoveError, IllegalMoveOutOfTurnError
 from game.queen import Queen
 
@@ -316,3 +327,55 @@ def test_illegal_move_out_of_turn():
 
     with raises(IllegalMoveOutOfTurnError):
         game.move("A3", "A4")
+
+
+def test_promote():
+    game = Game()
+
+    game.move("A2", "A4")
+    game.move("B7", "B5")
+    game.move("A4", "B5")
+    game.move("B8", "A6")
+    game.move("B5", "B6")
+    game.move("A6", "C5")
+    game.move("B6", "B7")
+    game.move("C5", "B3")
+    game.move("B7", "B8")
+    game.promote(PIECE_NAME_TYPE_MAP["Q"])
+    game.move("A8", "B8")
+    game.move("C2", "C4")
+    game.move("B8", "B4")
+    game.move("C4", "C5")
+    game.move("B4", "B5")
+    game.move("C5", "C6")
+    game.move("B5", "B6")
+    game.move("C6", "D7")
+    game.move("D8", "D7")
+    game.move("D2", "D4")
+    game.move("A7", "A5")
+    game.move("A1", "A4")
+    game.move("D7", "A4")
+    game.move("D4", "D5")
+    game.move("A4", "D4")
+    game.move("D5", "D6")
+    game.move("D4", "D1")
+    game.move("E1", "D1")
+    game.move("A5", "A4")
+    game.move("E2", "E4")
+    game.move("G7", "G5")
+    game.move("E4", "E5")
+    game.move("F8", "H6")
+    game.move("E5", "E6")
+    game.move("G8", "F6")
+    game.move("D6", "D7")
+    game.move("E8", "G8")
+    game.move("D7", "D8")
+    game.promote(PIECE_NAME_TYPE_MAP["Q"])
+    game.move("G8", "G7")
+    game.move("E6", "F7")
+    game.move("G7", "G6")
+    game.move("F1", "A6")
+    game.move("F8", "H8")
+    game.move("F7", "F8")
+    game.promote(PIECE_NAME_TYPE_MAP["Q"])
+    game.move("A4", "A3")
