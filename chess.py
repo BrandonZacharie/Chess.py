@@ -42,7 +42,7 @@ class Menu(object):
 
         self.items.append(("exit", None))
 
-    def navigate(self, n):
+    def navigate(self, n) -> None:
         self.position += n
 
         if self.position < 0:
@@ -50,7 +50,7 @@ class Menu(object):
         elif self.position >= len(self.items):
             self.position = len(self.items) - 1
 
-    def display(self):
+    def display(self) -> None:
         self.panel.top()
         self.panel.show()
         self.window.clear()
@@ -74,7 +74,10 @@ class Menu(object):
                 if self.position == len(self.items) - 1:
                     break
 
-                self.items[self.position][1]()
+                fn = self.items[self.position][1]
+
+                if fn is not None:
+                    fn()
 
             elif key == KEY_UP:
                 self.navigate(-1)

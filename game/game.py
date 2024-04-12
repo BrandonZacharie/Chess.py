@@ -18,7 +18,8 @@ from typing import (
     cast,
 )
 
-from pgn import loads as pgn_loads  # type: ignore
+from pgn import PGNGame  # type: ignore
+from pgn import loads as pgn_loads
 from semver import VersionInfo
 
 from .board import (
@@ -131,6 +132,22 @@ class Game:
     def turn(self, turn: Turn):
         self._next_turn = turn
 
+    def find_playable_cell(
+        self, cls: type[Piece], team: Team, rof: Optional[str], dest: Query
+    ) -> Cell:
+        for cells in self.board:
+            for cell in cells:
+                if (
+                    cell.piece is not None
+                    and cell.piece.team is team
+                    and isinstance(cell.piece, cls)
+                    and (rof is None or rof in cell.name)
+                    and self.move(cell.piece, self.cell(dest), False)
+                ):
+                    return cell
+
+        raise ValueError
+
     def reset(self):
         Game.__init__(self)
         self.notify("reset")
@@ -172,7 +189,7 @@ class Game:
 
         return True
 
-    def parse_json(self, filename: str) -> Optional[Game]:
+    def parse_json_file(self, filename: str) -> Optional[Game]:
         with open(filename, "r") as f:
             s = f.read()
             data = loads(s)
@@ -224,125 +241,58 @@ class Game:
                     raise ValueError("Unsupported version")
         return game
 
-    def parse_pgn(self, filename: str) -> List[Game]:
-        realpath = path.realpath(path.join(getcwd(), path.dirname(__file__)))
-        pgn_games = pgn_loads(open(path.join(realpath, filename)).read())
-        games: List[Game] = []
+    def parse_pgn_move(self, move: str) -> Optional[Tuple[Query, Query, str | None]]:
+        if move[0] == "{":
+            return None
 
-        def find_cell(
-            game: Game,
-            cls: type[Piece],
-            team: Team,
-            rof: Optional[str],
-            destination: str,
-        ) -> Cell:
-            for cells in game.board:
-                for cell in cells:
-                    if (
-                        cell.piece is not None
-                        and cell.piece.team is team
-                        and isinstance(cell.piece, cls)
-                        and (rof is None or rof in cell.name)
-                        and game.move(cell.piece, game.cell(destination), False)
-                    ):
-                        return cell
+        team = Team.BLACK if self.turn == Turn.BLACK else Team.WHITE
+        move = move.replace("+", "").replace("x", "")
 
-            raise ValueError
-
-        def parse_move(
-            game: Game, pgn_move: str
-        ) -> Optional[Tuple[Query, Query, str | None]]:
-            if pgn_move[0] == "{":
+        match move:
+            case "O-O":
+                return ("E8", "G8", None) if team is Team.BLACK else ("E1", "G1", None)
+            case "O-O-O":
+                return ("E8", "C8", None) if team is Team.BLACK else ("E1", "C1", None)
+            case "0-1" | "1-0" | "1/2-1/2":
                 return None
 
-            team = Team.BLACK if game.turn == Turn.BLACK else Team.WHITE
-            pgn_move = pgn_move.replace("+", "").replace("x", "")
+        p: type[Piece] = Pawn
+        q1: Query
+        q2: Query
+        rof: Optional[str] = None
+        promo: Optional[str] = None
 
-            match pgn_move:
-                case "O-O":
-                    return (
-                        ("E8", "G8", None) if team is Team.BLACK else ("E1", "G1", None)
-                    )
-                case "O-O-O":
-                    return (
-                        ("E8", "C8", None) if team is Team.BLACK else ("E1", "C1", None)
-                    )
-                case "0-1" | "1-0" | "1/2-1/2":
-                    return None
+        if "=" in move:
+            promo = move[-1]
+            move = move[:-2]
 
-            p: type[Piece] = Pawn
-            q1: Query
-            q2: Query
-            rof: Optional[str] = None
-            promo: Optional[str] = None
+        if move[0].isupper():
+            p = PIECE_NAME_TYPE_MAP[move[0]]
+            move = move[1:]
 
-            if "=" in pgn_move:
-                promo = pgn_move[-1]
-                pgn_move = pgn_move[:-2]
-
-            if pgn_move[0].isupper():
-                p = PIECE_NAME_TYPE_MAP[pgn_move[0]]
-                pgn_move = pgn_move[1:]
-
-            match len(pgn_move):
-                case 2:
-                    pass
-                case 3:
-                    rof = pgn_move[0].upper()
-                    pgn_move = pgn_move[1:]
-                case _:
-                    raise ValueError
-
-            q2 = pgn_move.upper()
-            q1 = find_cell(game, p, team, rof, q2).name
-
-            return q1, q2, promo
-
-        for pgn_game in pgn_games:
-            game = Game()
-            can_parse = True
-
-            if pgn_game.date == "2001.10.25" and pgn_game.black == "Nakamura,H":
+        match len(move):
+            case 2:
                 pass
+            case 3:
+                rof = move[0].upper()
+                move = move[1:]
+            case _:
+                raise ValueError
 
-            for pgn_move in pgn_game.moves:
-                if not can_parse:
-                    continue
+        q2 = move.upper()
+        q1 = self.find_playable_cell(p, team, rof, q2).name
 
-                if pgn_move == "(":
-                    can_parse = False
-
-                    continue
-
-                if pgn_move == ")":
-                    can_parse = True
-
-                    continue
-
-                move = parse_move(game, pgn_move)
-
-                if move is not None:
-                    q1, q2, promotion = move
-
-                    game.move(q1, q2)
-
-                    if promotion is not None:
-                        game.promote(PIECE_NAME_TYPE_MAP[promotion])
-
-        return games
+        return q1, q2, promo
 
     def load(self, filename: str, filetype: FileType = FileType.JSON):
         game: Optional[Game] = None
 
         match filetype:
             case FileType.PGN:
-                games = self.parse_pgn(filename)
-
-                if len(games) > 0:
-                    game = games[-1]
+                game = PGNFile(filename).game()
 
             case FileType.JSON:
-                game = self.parse_json(filename)
+                game = self.parse_json_file(filename)
 
         if game is not None:
             Game.__init__(self, game)
@@ -414,7 +364,7 @@ class Game:
         main_move: Optional[Move] = None
         rook_move: Optional[Move] = None
 
-        def reverse():
+        def reverse() -> None:
             if main_move is not None:
                 main_move.reverse()
 
@@ -441,11 +391,11 @@ class Game:
             main_move = self.board.move_piece(piece, cell2)
             rook_cell = self.board[cell2.y][0 if x > 0 else 7]
             rook_piece = rook_cell.piece
-            is_castling = piece.is_castling = (
+            piece.is_castling = (
                 isinstance(piece, King) and abs(x) == 2 and rook_piece is not None
             )
 
-            if is_castling:
+            if piece.is_castling:
                 try:
                     rook_move = self.board.move_piece(
                         rook_piece,
@@ -453,14 +403,6 @@ class Game:
                     )
                 finally:
                     piece.is_castling = False
-
-            if not self.board.get_king(piece.team).is_safe:
-                main_move.reverse()
-
-                if rook_move is not None:
-                    rook_move.reverse()
-
-                raise IllegalMoveThroughCheckError(cell1, cell2)
 
             if can_commit:
                 self._last_turn = turn
@@ -527,3 +469,41 @@ class Game:
             self._handlers[event].remove(handler)
         except KeyError:
             pass
+
+
+class PGNFile(List[PGNGame]):
+    def __init__(self, filename: str) -> None:
+        self.filename = filename
+        realpath = path.realpath(path.join(getcwd(), path.dirname(__file__)))
+
+        super().__init__(pgn_loads(open(path.join(realpath, self.filename)).read()))
+
+    def game(self, index: int = -1) -> Game:
+        game = Game()
+        can_parse = True
+
+        for pgn_move in self[index].moves:
+            if not can_parse:
+                continue
+
+            if pgn_move == "(":
+                can_parse = False
+
+                continue
+
+            if pgn_move == ")":
+                can_parse = True
+
+                continue
+
+            move = game.parse_pgn_move(pgn_move)
+
+            if move is not None:
+                q1, q2, promotion = move
+
+                game.move(q1, q2)
+
+                if promotion is not None:
+                    game.promote(PIECE_NAME_TYPE_MAP[promotion])
+
+        return game

@@ -126,3 +126,8 @@ class IllegalMoveCastlingMovedRookError(IllegalMoveError):
 class IllegalPromotionTypeError(IllegalMoveError):
     def __init__(self, cell1: Cell, type: Type):
         super().__init__(f"cannot be promoted to {type.__name__}", cell1)
+
+
+class IllegalMoveTakingKingError(IllegalMoveError):
+    def __init__(self, cell1: Optional[Cell], cell2: Cell):
+        super().__init__("cannot take King", cell1, cell2)

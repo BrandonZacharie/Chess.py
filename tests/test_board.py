@@ -16,8 +16,13 @@ from game import (
     Queen,
     Rook,
     Team,
+    Turn,
 )
-from game.error import IllegalMoveThroughCheckError, IllegalMoveToCheckError
+from game.error import (
+    IllegalMoveTakingKingError,
+    IllegalMoveThroughCheckError,
+    IllegalMoveToCheckError,
+)
 
 
 def test_layout():
@@ -153,11 +158,9 @@ def test_pawn_white_move_invalid():
         [Pawn] * 4 + [NoneType] + [Pawn] * 3,
         [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook],
     ]
-
     pawn = board[6][4].piece
 
-    board.move_piece(pawn, pawn.cell.up(2))
-
+    assert board.try_move_piece(pawn, pawn.cell.up(2))
     assert not board.try_move_piece(pawn, pawn.cell.left())
     assert not board.try_move_piece(pawn, pawn.cell.right())
     assert not board.try_move_piece(pawn, pawn.cell.down())
@@ -354,6 +357,35 @@ def test_illegal_move_in_check():
     game.move("C3", "E4")
 
     assert game.board.get_king(Team.WHITE).is_safe
+
+
+def test_illegal_move_taking_king():
+    s = """
+        ──┬───┬───┬───┬───┬───┬───┬───┬───┐
+        8 │ ♖ │ ♘ │ ♗ │ ♕ │ ♔ │ ♗ │ ♘ │ ♖ │
+        ──┼───┼───┼───┼───┼───┼───┼───┼───┤
+        7 │ ♙ │ ♙ │ ♙ │ ♙ │ ♙ │ ♙ │ ♞ │ ♙ │
+        ──┼───┼───┼───┼───┼───┼───┼───┼───┤
+        6 │   │   │   │   │   │   │   │   │
+        ──┼───┼───┼───┼───┼───┼───┼───┼───┤
+        5 │   │   │   │   │   │   │   │   │
+        ──┼───┼───┼───┼───┼───┼───┼───┼───┤
+        4 │   │ ♟ │ ♟ │ ♟ │ ♟ │ ♟ │ ♟ │ ♟ │
+        ──┼───┼───┼───┼───┼───┼───┼───┼───┤
+        3 │ ♟ │   │ ♝ │   │   │   │   │   │
+        ──┼───┼───┼───┼───┼───┼───┼───┼───┤
+        2 │   │ ♜ │   │ ♞ │ ♛ │   │   │   │
+        ──┼───┼───┼───┼───┼───┼───┼───┼───┤
+        1 │   │   │ ♚ │   │ ♜ │ ♝ │   │   │
+        ──┼───┼───┼───┼───┼───┼───┼───┼───┤
+          │ A │ B │ C │ D │ E │ F │ G │ H │
+        """
+    game = Game()
+
+    game.loads(s)
+
+    with raises(IllegalMoveTakingKingError):
+        game.move("G7", "E8")
 
 
 def test_team_rows():

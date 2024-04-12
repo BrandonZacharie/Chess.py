@@ -209,8 +209,7 @@ def get_input(window: CursesWindow, mode: InputMode) -> List[int]:
     return input
 
 
-def main(window: CursesWindow):
-    game = Game()
+def main(window: CursesWindow, game: Game = Game()):
     mode = InputMode.SELECT_CELL
     q1 = ""
     q2 = ""
@@ -266,7 +265,7 @@ def main(window: CursesWindow):
                     mode = InputMode.SELECT_CELL
 
 
-def run():
+def run() -> None:
     wrapper(main)
 
 

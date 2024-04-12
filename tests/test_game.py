@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from tempfile import NamedTemporaryFile
 from typing import Any, Callable, List, Optional, Sequence, Tuple, Type
 
@@ -12,11 +13,16 @@ from game import (
     Game,
     Knight,
     Pawn,
+    PGNFile,
     Query,
     Team,
     Turn,
 )
-from game.error import IllegalMoveError, IllegalMoveOutOfTurnError
+from game.error import (
+    IllegalMoveError,
+    IllegalMoveOutOfTurnError,
+    IllegalMoveThroughCheckError,
+)
 from game.queen import Queen
 
 
@@ -94,7 +100,7 @@ def test_save(version: int):
     game.move("A2", "A3")
 
     with NamedTemporaryFile() as f:
-        save = lambda: game.save(f.name, version=version)
+        save: Callable = lambda: game.save(f.name, version=version)
 
         if version == 0:
             with raises(ValueError):
@@ -209,16 +215,27 @@ def test_load_json_unsupported_version():
             Game().load(f.name)
 
 
-@mark.parametrize("filename", ["../tests/test1.pgn", "../tests/test2.pgn"])
-def test_load_pgn(filename: str):
+@mark.parametrize(
+    "filename",
+    [
+        "../tests/test1.pgn",
+        "../tests/test2.pgn",
+        "../tests/Carlsen.pgn",
+        "../tests/Nakamura.pgn",
+    ],
+)
+def test_load_pgn_file(filename: str):
     game = Game()
 
     game.load(filename, FileType.PGN)
 
+    pgn_file = PGNFile(filename)
+    count = len(pgn_file)
 
-@mark.parametrize("filename", ["../tests/Nakamura.pgn", "../tests/Carlsen.pgn"])
-def test_parse_pgn(filename: str):
-    games = Game().parse_pgn(filename)
+    assert count > 0
+
+    with ThreadPoolExecutor() as executor:
+        executor.map(pgn_file.game, range(count))
 
 
 def test_notify():
@@ -379,3 +396,52 @@ def test_promote():
     game.move("F7", "F8")
     game.promote(PIECE_NAME_TYPE_MAP["Q"])
     game.move("A4", "A3")
+
+
+def test_playable_cell():
+    game = Game()
+
+    assert game.find_playable_cell(Pawn, Team.WHITE, None, "A3").name == "A2"
+    assert game.find_playable_cell(Pawn, Team.WHITE, None, "A4").name == "A2"
+
+    with raises(ValueError):
+        game.find_playable_cell(Pawn, Team.WHITE, None, "A5")
+
+    assert game.find_playable_cell(Knight, Team.WHITE, None, "A3").name == "B1"
+    assert game.find_playable_cell(Knight, Team.WHITE, None, "C3").name == "B1"
+
+    with raises(ValueError):
+        game.find_playable_cell(Knight, Team.WHITE, None, "D2")
+
+
+def test_invalid_pgn_move():
+    game = Game()
+
+    with raises(ValueError):
+        game.parse_pgn_move("aaaa")
+
+    with raises(ValueError):
+        game.parse_pgn_move("a5")
+
+
+def test_illegal_move_through_check():
+    game = Game()
+
+    game.move("A2", "A4")
+    game.move("B7", "B5")
+    game.move("A4", "B5")
+    game.move("C7", "C5")
+    game.move("B5", "C6")
+    game.move("B8", "C6")
+    game.move("A1", "A6")
+    game.move("C8", "A6")
+    game.move("C2", "C4")
+    game.move("A6", "C4")
+    game.move("D1", "A4")
+    game.move("D8", "A5")
+    game.move("A4", "A5")
+    game.move("A7", "A6")
+    game.move("A5", "C7")
+
+    with raises(IllegalMoveThroughCheckError):
+        game.move("E8", "C8")

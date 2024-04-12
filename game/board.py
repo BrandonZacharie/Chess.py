@@ -226,9 +226,6 @@ class Move:
 
     def perform(self) -> None:
         if self.taken_cell.piece is not None:
-            if isinstance(self.taken_cell.piece, King):
-                raise ValueError
-
             self.taken_piece = self.taken_cell.piece
 
         self.taken_cell.piece = None
@@ -343,28 +340,27 @@ class Board(List[List[Cell]]):
             cell if not is_en_passant else cell.up() if piece.is_black else cell.down(),
         )
 
-        try:
-            move.perform()
+        move.perform()
 
-            king = self.get_king(piece.team)
+        king = self.get_king(piece.team)
 
-            if not king.is_safe:
-                move.reverse()
+        if not king.is_safe:
+            move.reverse()
 
-                from .error import IllegalMoveThroughCheckError, IllegalMoveToCheckError
+            from .error import IllegalMoveThroughCheckError, IllegalMoveToCheckError
 
-                Error = (
-                    IllegalMoveThroughCheckError
-                    if piece is king
-                    else IllegalMoveToCheckError
-                )
+            Error = (
+                IllegalMoveThroughCheckError
+                if piece is king
+                else IllegalMoveToCheckError
+            )
 
-                raise Error(piece.cell, cell)
-        except IndexError:
-            pass
+            raise Error(piece.cell, cell)
 
         if move.taken_piece is not None and isinstance(move.taken_piece, King):
-            raise ValueError
+            from .error import IllegalMoveTakingKingError
+
+            raise IllegalMoveTakingKingError(piece.cell, cell)
 
         if move.taken_piece is not None:
             self.captures[move.taken_piece.team].append(move.taken_piece)
@@ -374,10 +370,10 @@ class Board(List[List[Cell]]):
     def try_move_piece(self, piece: Piece, cell: Cell) -> bool:
         try:
             self.move_piece(piece, cell)
-
-            return True
         except:
             return False
+
+        return True
 
     def get_cells(self, start: Cell, direction: Direction, max: int = 8) -> List[Cell]:
         cells: List[Cell] = []
