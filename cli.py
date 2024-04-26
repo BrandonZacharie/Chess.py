@@ -214,9 +214,9 @@ def main(window: CursesWindow, game: Game = Game()):
     q1 = ""
     q2 = ""
 
-    window.clear()
     curs_set(2)
-
+    window.move(0, 0)
+    window.clrtobot()
     draw_head(window)
     draw_board(window, game.board)
 
@@ -228,9 +228,6 @@ def main(window: CursesWindow, game: Game = Game()):
         try:
             input = "".join([chr(ch) for ch in get_input(window, mode)]).upper()
         except KeyboardInterrupt:
-            window.clear()
-            curs_set(0)
-
             return
 
         match mode:
