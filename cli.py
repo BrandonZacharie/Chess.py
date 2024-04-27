@@ -1,6 +1,7 @@
 from curses import A_BOLD, A_UNDERLINE, KEY_DOWN, KEY_ENTER, KEY_UP, curs_set, wrapper
-from curses.ascii import ESC
+from curses.ascii import ESC, LF
 from enum import Enum
+from itertools import zip_longest
 from typing import TYPE_CHECKING, List, Optional, Tuple, cast
 
 from game import PIECE_NAME_TYPE_MAP, Board, Game, Team
@@ -30,7 +31,7 @@ def draw_head(window: CursesWindow):
 
 def draw_board(window: CursesWindow, board: Board):
     x = 5
-    y = 6
+    y = 7
 
     """Draw the board."""
     for line in str(board).splitlines():
@@ -40,12 +41,19 @@ def draw_board(window: CursesWindow, board: Board):
 
     """Draw the captures."""
     for captures, y in (
-        (board.captures[Team.BLACK], 5),
-        (board.captures[Team.WHITE], y + 1),
+        (board.captures[Team.WHITE], 4),
+        (board.captures[Team.BLACK], y),
     ):
-        window.addstr(y - 1, x + 1, "⌜" + " " * 33 + "⌝")
-        window.addstr(y + 0, x + 3, " ".join(str(piece) for piece in captures))
-        window.addstr(y + 1, x + 1, "⌞" + " " * 33 + "⌟")
+        window.addstr(y, x + 1, "⌜" + " " * 33 + "⌝")
+
+        y += 1
+
+        for i, pieces in enumerate(
+            list(zip_longest(*[iter(captures)] * 16, fillvalue=" "))
+        ):
+            window.addstr(y + i, x + 3, " ".join(str(piece) for piece in pieces))
+
+        window.addstr(y + 2, x + 1, "⌞" + " " * 33 + "⌟")
 
     """Draw the log."""
     draw_log(window, board)
@@ -81,7 +89,7 @@ def draw_log(window: CursesWindow, board: Board):
     columns = 1
     prefix_max = 0
     output_max = 8
-    length_max = 22
+    length_max = 24
 
     window.addstr(y - 1, x - 2, "⌜")
     window.addstr(y + length_max, x - 2, "⌞")
@@ -117,7 +125,7 @@ def draw_log(window: CursesWindow, board: Board):
 
 def draw_notes(window: CursesWindow, game: Game, mode: InputMode):
     x = 6
-    y = 29
+    y = 31
     lead = "It is "
     tail = "'s turn."
     turn = game.turn
@@ -132,7 +140,7 @@ def draw_notes(window: CursesWindow, game: Game, mode: InputMode):
 
 def draw_input_prompt(window: CursesWindow, mode: InputMode):
     x = 6
-    y = 30
+    y = 32
 
     match mode:
         case InputMode.SELECT_CELL:
@@ -147,7 +155,7 @@ def draw_input_prompt(window: CursesWindow, mode: InputMode):
 
 def draw_input_err(window: CursesWindow, e: Exception | str):
     x = 6
-    y = 30
+    y = 32
 
     window.move(y + 1, x)
     window.clrtoeol()
@@ -156,7 +164,7 @@ def draw_input_err(window: CursesWindow, e: Exception | str):
 
 
 def draw_input_cursor(window: CursesWindow, mode: InputMode, s: Optional[str] = None):
-    y = 31
+    y = 33
     x = 6
 
     match mode:
@@ -175,9 +183,10 @@ def draw_input_cursor(window: CursesWindow, mode: InputMode, s: Optional[str] = 
 
 
 def draw_input(window: CursesWindow, mode: InputMode, ch: int):
+    y = 33
     x = 6 if mode is InputMode.SELECT_CELL else 9
 
-    window.addstr(31, x, f"{chr(ch)}".upper())
+    window.addstr(y, x, f"{chr(ch)}".upper())
 
 
 def get_input(window: CursesWindow, mode: InputMode) -> List[int]:
@@ -195,7 +204,7 @@ def get_input(window: CursesWindow, mode: InputMode) -> List[int]:
     while count > 0:
         ch = window.getch()
 
-        if ch in [KEY_DOWN, KEY_ENTER, KEY_UP]:
+        if ch in [KEY_DOWN, KEY_ENTER, KEY_UP, KEY_ENTER, LF] or ch > ord("h"):
             continue
 
         if ch == ESC:
