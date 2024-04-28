@@ -37,10 +37,6 @@ else:
 MenuItems: TypeAlias = List[Tuple[str, Optional[Callable]]]
 
 
-class EscapeInterrupt(Exception):
-    pass
-
-
 class Menu(object):
     def __init__(self, items: MenuItems, window: CursesWindow):
         self.window = window.subwin(3, 4)
@@ -99,7 +95,7 @@ class Menu(object):
                 self.panel.hide()
                 panel.update_panels()
                 doupdate()
-        except EscapeInterrupt:
+        except KeyboardInterrupt:
             pass
 
         curs_set(0)
@@ -218,7 +214,7 @@ class Chess(object):
 
             self.window.move(y, cursor + x)
 
-        raise EscapeInterrupt
+        raise KeyboardInterrupt
 
     def load_json(self):
         pass

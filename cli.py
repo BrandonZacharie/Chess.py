@@ -18,6 +18,9 @@ else:
     CursesWindow = Any
 
 
+BOARD_CELL_ORDS = [ord(ch) for ch in "12345678ABCDEFGHabcdefgh"]
+
+
 class InputMode(Enum):
     PAUSED = 0
     SELECT_CELL = 1
@@ -55,31 +58,31 @@ def draw_board(window: CursesWindow, board: Board):
 
         window.addstr(y + 2, x + 1, "⌞" + " " * 33 + "⌟")
 
-    """Draw the log."""
-    draw_log(window, board)
+    """Draw the moves."""
+    draw_moves(window, board)
 
 
-def draw_log(window: CursesWindow, board: Board):
+def draw_moves(window: CursesWindow, board: Board):
     def get_cell_name(indices: Tuple[int, int]) -> str:
         return board[indices[1]][indices[0]].name
 
     def get_moves() -> List[List[str]]:
-        moves = 0
-        log: List[List[str]] = []
+        count = 0
+        moves: List[List[str]] = []
 
         for entry in board.log:
             if type(entry[1]) is tuple:
                 move = cast(LogMove, entry)
 
-                log.append([f"{get_cell_name(move[0])}:{get_cell_name(move[1])}"])
+                moves.append([f"{get_cell_name(move[0])}:{get_cell_name(move[1])}"])
 
-                moves += 1
+                count += 1
             else:
                 event = cast(LogEvent, entry)
 
-                log[moves - 1].append(f"{get_cell_name(event[0])}:^{event[1]}")
+                moves[count - 1].append(f"{get_cell_name(event[0])}:^{event[1]}")
 
-        return log
+        return moves
 
     moves = get_moves()
     count = len(moves)
@@ -204,11 +207,11 @@ def get_input(window: CursesWindow, mode: InputMode) -> List[int]:
     while count > 0:
         ch = window.getch()
 
-        if ch in [KEY_DOWN, KEY_ENTER, KEY_UP, KEY_ENTER, LF] or ch > ord("h"):
-            continue
-
         if ch == ESC:
             raise KeyboardInterrupt
+
+        if ch not in BOARD_CELL_ORDS:
+            continue
 
         draw_input(window, mode, ch)
         input.append(ch)
