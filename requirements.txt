@@ -1,10 +1,12 @@
 # runtime
 semver~=3.0.2
 pgnparser~=1.0.0
+python_dateutil~=2.9.0
 
 # development
 coverage~=7.4.3
 pytest~=8.1.1
+types-python-dateutil~=2.9.0
 
 # build
 black
