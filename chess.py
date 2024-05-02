@@ -2,6 +2,7 @@ from curses import (
     A_COLOR,
     A_NORMAL,
     A_REVERSE,
+    A_DIM,
     KEY_BACKSPACE,
     KEY_DC,
     KEY_DOWN,
@@ -40,8 +41,7 @@ else:
 
     CursesWindow = Any
 
-MenuItems: TypeAlias = List[Tuple[str, Optional[Callable]]]
-
+MenuItems: TypeAlias = List[Tuple[str, Optional[Callable]]|Tuple[str, Optional[Callable], int]]
 
 class KeyCode(IntEnum):
     BACKSPACE = KEY_BACKSPACE
@@ -132,13 +132,16 @@ class Menu(object):
                 curs_set(0)
 
                 for index, item in enumerate(self.pages[self.page]):
-                    mode = A_REVERSE if index == self.position else A_NORMAL
                     msg = (
                         f" ↵  {item[0]}  "
                         if item[1] is None
                         else " %d. %s  "
                         % (index + 1 + (self.page * self.page_size), item[0])
                     )
+                    mode = A_REVERSE if index == self.position else A_NORMAL
+
+                    if len(item) == 3:
+                        mode |= item[2]
 
                     self.window.addstr(1 + index, 1, msg, mode)
 
@@ -176,10 +179,10 @@ class Chess(object):
         draw_head(window)
 
         class Menus:
-            main = Menu(
+            root = Menu(
                 [
                     ("new game", self.play),
-                    ("load file", self.load),
+                    ("load file", self.draw_load_menu),
                     ("about", self.draw_about),
                 ],
                 window,
@@ -187,7 +190,14 @@ class Chess(object):
             load = Menu(
                 [
                     ("PGN", self.load_pgn),
-                    ("JSON", self.load_json),
+                    ("JSON", self.load_json, A_DIM),
+                ],
+                window,
+            )
+            save = Menu(
+                [
+                    ("PGN", self.save_pgn, A_DIM),
+                    ("JSON", self.save_json),
                 ],
                 window,
             )
@@ -196,29 +206,103 @@ class Chess(object):
         self.game: Optional[Game] = None
         self.menus = Menus()
 
-        self.menus.main.display()
+        self.menus.root.display()
 
     def play(self, game: Optional[Game] = None):
         if self.game is None:
-            self.menus.main.insert(0, ("continue", lambda: self.play(self.game)))
+            self.menus.root.insert(0, ("continue…", lambda: self.play(self.game)))
+            self.menus.root.insert(2, ("save file", self.draw_save_menu))
 
         self.game = Game() if game is None else game
 
         main(self.window, self.game)
 
-        self.menus.main.position = 0
+        self.menus.root.position = 0
 
-    def load(self):
+    def draw_save_menu(self):
+        self.menus.save.display()
+
+        self.menus.save.position = 0
+
+    def save_pgn(self):
+        pass
+
+    def save_json(self):
+        self._fileprompt(handler=self._save_json)
+
+        raise KeyboardInterrupt
+
+    def draw_load_menu(self):
         self.menus.load.display()
 
         self.menus.load.position = 0
 
     def load_pgn(self):
+        self._fileprompt(handler=self._load_pgn)
+
+    def load_json(self):
+        pass
+
+    def _save_json(self, filename: str) -> bool:
+        x = 5
+        y = 5
+
+        if self.game is None:
+            self.window.addstr(y + 2, x, "Game not found.", A_COLOR)
+        else:
+            try:
+                self.game.save(filename)
+
+                return True
+            except FileNotFoundError:
+                self.window.addstr(y + 2, x, "File not found.", A_COLOR)
+            except Exception as e:
+                self.window.addstr(y + 2, x, f"Error: {e}", A_COLOR)
+
+        return False
+
+    def _load_pgn(self, filename: str) -> bool:
+        x = 5
+        y = 5
+
+        try:
+            pgn_file = PGNFile(filename)
+
+            if len(pgn_file) == 0:
+                self.window.addstr(y + 2, x, "No games found.", A_COLOR)
+            else:
+                Menu(
+                    [
+                        (
+                            f"{parse(cast(str, game.date).replace('.??', ''), fuzzy=True).date()} \"{game.event}\" {game.white} vs. {game.black}",
+                            partial(lambda i: self.play(pgn_file.game(i)), i),
+                        )
+                        for i, game in enumerate(pgn_file)
+                    ],
+                    self.window,
+                ).display()
+
+            return True
+        except FileNotFoundError:
+            self.window.addstr(y + 2, x, "File not found.", A_COLOR)
+        except Exception as e:
+            self.window.addstr(y + 2, x, f"Error: {e}", A_COLOR)
+
+        return False
+
+    def _fileprompt(
+        self,
+        filename: Optional[str] = None,
+        handler: Optional[Callable[[str], bool]] = None):
         x = 5
         y = 4
-        prompt = (
-            "〉" + path.realpath(path.join(getcwd(), path.dirname(__file__))) + path.sep
-        )
+
+        if filename is None:
+            filename = (
+                path.realpath(path.join(getcwd(), path.dirname(__file__))) + path.sep
+            )
+
+        prompt = "〉" + filename
 
         self.window.move(y, x)
         self.window.clrtobot()
@@ -240,32 +324,10 @@ class Chess(object):
                     self.window.addstr(y + 2, x, "Loading...", A_COLOR)
                     self.window.refresh()
 
-                    try:
-                        pgn_file = PGNFile(prompt[1:])
+                    if handler is None or handler(prompt[1:]):
+                        return
 
-                        if len(pgn_file) == 0:
-                            self.window.addstr(y + 2, x, "No games found.", A_COLOR)
-                        else:
-                            menu = Menu(
-                                [
-                                    (
-                                        f"{parse(cast(str, game.date).replace('.??', ''), fuzzy=True).date()} \"{game.event}\" {game.white} vs. {game.black}",
-                                        partial(
-                                            lambda i: self.play(pgn_file.game(i)), i
-                                        ),
-                                    )
-                                    for i, game in enumerate(pgn_file)
-                                ],
-                                self.window,
-                            )
-
-                            menu.display()
-
-                        break
-                    except FileNotFoundError:
-                        self.window.addstr(y + 2, x, "File not found.", A_COLOR)
-                    except Exception as e:
-                        self.window.addstr(y + 2, x, f"Error: {e}", A_COLOR)
+                    self.window.clrtobot()
                 case KeyCode.LEFT:
                     if cursor > 2:
                         cursor -= 1
@@ -303,9 +365,6 @@ class Chess(object):
             self.window.move(y, cursor + x)
 
         raise KeyboardInterrupt
-
-    def load_json(self):
-        pass
 
     def draw_about(self):
         y = 4
