@@ -208,7 +208,7 @@ class Chess(object):
             load = Menu(
                 [
                     ("PGN", self.load_pgn),
-                    ("JSON", self.load_json, A_DIM),
+                    ("JSON", self.load_json),
                 ],
                 window,
                 "load file",
@@ -261,7 +261,7 @@ class Chess(object):
         self._fileprompt(handler=self._load_pgn)
 
     def load_json(self):
-        pass
+        self._fileprompt(handler=self._load_json)
 
     def _save_json(self, filename: str) -> bool:
         x = 5
@@ -301,6 +301,24 @@ class Chess(object):
                     ],
                     self.window,
                 ).display()
+
+            return True
+        except FileNotFoundError:
+            self.window.addstr(y + 2, x, "File not found.", A_COLOR)
+        except Exception as e:
+            self.window.addstr(y + 2, x, f"Error: {e}", A_COLOR)
+
+        return False
+
+    def _load_json(self, filename: str) -> bool:
+        x = 5
+        y = 6
+
+        try:
+            game = Game()
+
+            game.load(filename)
+            self.play(game)
 
             return True
         except FileNotFoundError:
