@@ -41,7 +41,6 @@ from .board import (
 from .error import (
     IllegalMoveError,
     IllegalMoveOutOfTurnError,
-    IllegalMoveThroughCheckError,
     IllegalMoveWhilePromotingError,
     IllegalPromotionTypeError,
 )
@@ -148,7 +147,7 @@ class Game:
 
         raise ValueError
 
-    def reset(self):
+    def reset(self) -> None:
         Game.__init__(self)
         self.notify("reset")
 

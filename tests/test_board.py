@@ -1,5 +1,5 @@
 from types import NoneType
-from typing import List, Type
+from typing import List, Type, cast
 
 from pytest import raises
 
@@ -16,7 +16,6 @@ from game import (
     Queen,
     Rook,
     Team,
-    Turn,
 )
 from game.error import (
     IllegalMoveTakingKingError,
@@ -56,7 +55,7 @@ def test_layout():
 
 def test_pawn_white_move_1():
     board = Board()
-    template: List[List[Type[Piece]]] = [
+    template: List[List[Type[Piece | None]]] = [
         [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook],
         [Pawn] * 8,
         [NoneType] * 8,
@@ -102,7 +101,7 @@ def test_pawn_white_move_1():
 
 def test_pawn_white_move_2():
     board = Board()
-    template: List[List[Type[Piece]]] = [
+    template: List[List[Type[Piece | None]]] = [
         [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook],
         [Pawn] * 8,
         [NoneType] * 8,
@@ -148,14 +147,14 @@ def test_pawn_white_move_2():
 
 def test_pawn_white_move_invalid():
     board = Board()
-    template: List[List[Type[Piece]]] = [
+    template: List[List[Type[Piece | None]]] = [
         [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook],
         [Pawn] * 8,
         [NoneType] * 8,
         [NoneType] * 8,
-        [NoneType] * 4 + [Pawn] + [NoneType] * 3,
+        cast(List, [NoneType] * 4 + [Pawn] + [NoneType] * 3),
         [NoneType] * 8,
-        [Pawn] * 4 + [NoneType] + [Pawn] * 3,
+        cast(List, [Pawn] * 4 + [NoneType] + [Pawn] * 3),
         [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook],
     ]
     pawn = board[6][4].piece
@@ -458,4 +457,4 @@ def test_piece_symbols():
         ),
         "♙ ♟ ♖ ♜ ♘ ♞ ♗ ♝ ♕ ♛ ♔ ♚".split(" "),
     ):
-        assert str(type(team)) == char
+        assert str(type(team)) == char  # type: ignore

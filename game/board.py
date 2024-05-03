@@ -144,7 +144,7 @@ class Cell:
 
     def __str__(self):  # pragma: no cover
         piece = " " if self.piece is None else str(self.piece)
-        x, y = self.name
+        x, y = self.name[0], self.name[1]
 
         return f"\n   ┌───┐\n {y} │ {piece} │\n   └───┘\n     {x}"
 

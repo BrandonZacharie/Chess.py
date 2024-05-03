@@ -174,7 +174,8 @@ def test_load_json(version: int):
     ),
 )
 def test_load_json_invalid_log(
-    logs: Sequence[Tuple[str, Any]], exception: Type[Exception]
+    logs: Sequence[Tuple[str, Any]],
+    exception: Type[Exception],
 ):
     game = Game()
 
@@ -194,19 +195,20 @@ def test_load_json_invalid_log(
 
 
 def test_load_json_unsupported_version():
-    game = Game()
+    class TestGame(Game):
+        def serializable(
+            self, version: str | int | float = 2
+        ) -> Optional[dict[str, str]]:
+            data = super().serializable(version)
+
+            if data is not None:
+                data["fileVersion"] = "0.0.0"
+
+            return data
+
+    game = TestGame()
 
     game.move("A2", "A3")
-
-    def serializable(version: str | int | float = 2) -> Optional[dict[str, str]]:
-        data = Game.serializable(game, version)
-
-        if data is not None:
-            data["fileVersion"] = str(VersionInfo(0, 0, 0))
-
-        return data
-
-    game.serializable = serializable
 
     with NamedTemporaryFile() as f:
         game.save(f.name)
