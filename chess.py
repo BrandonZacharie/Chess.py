@@ -1,8 +1,8 @@
 from curses import (
     A_COLOR,
+    A_DIM,
     A_NORMAL,
     A_REVERSE,
-    A_DIM,
     KEY_BACKSPACE,
     KEY_DC,
     KEY_DOWN,
@@ -41,7 +41,10 @@ else:
 
     CursesWindow = Any
 
-MenuItems: TypeAlias = List[Tuple[str, Optional[Callable]]|Tuple[str, Optional[Callable], int]]
+MenuItems: TypeAlias = List[
+    Tuple[str, Optional[Callable]] | Tuple[str, Optional[Callable], int]
+]
+
 
 class KeyCode(IntEnum):
     BACKSPACE = KEY_BACKSPACE
@@ -67,9 +70,15 @@ class KeyCode(IntEnum):
 
 
 class Menu(object):
-    def __init__(self, items: MenuItems, window: CursesWindow):
+    def __init__(
+        self,
+        items: MenuItems,
+        window: CursesWindow,
+        title: Optional[str] = None,
+    ):
         self._pages: Optional[List[MenuItems]] = None
         self.window = window.subwin(3, 4)
+        self.title = title
         self.position = 0
         self.page = 0
         self.page_size = 25
@@ -131,6 +140,15 @@ class Menu(object):
                 doupdate()
                 curs_set(0)
 
+                y = 0
+
+                if self.title is not None:
+                    self.window.addstr(y, 2, "↳ " + self.title)
+
+                    y += 1
+
+                y += 1
+
                 for index, item in enumerate(self.pages[self.page]):
                     msg = (
                         f" ↵  {item[0]}  "
@@ -143,7 +161,7 @@ class Menu(object):
                     if len(item) == 3:
                         mode |= item[2]
 
-                    self.window.addstr(1 + index, 1, msg, mode)
+                    self.window.addstr(y + index, 1, msg, mode)
 
                 key = self.window.getch()
 
@@ -193,6 +211,7 @@ class Chess(object):
                     ("JSON", self.load_json, A_DIM),
                 ],
                 window,
+                "load file",
             )
             save = Menu(
                 [
@@ -200,6 +219,7 @@ class Chess(object):
                     ("JSON", self.save_json),
                 ],
                 window,
+                "save file",
             )
 
         self.window = window
@@ -245,7 +265,7 @@ class Chess(object):
 
     def _save_json(self, filename: str) -> bool:
         x = 5
-        y = 5
+        y = 6
 
         if self.game is None:
             self.window.addstr(y + 2, x, "Game not found.", A_COLOR)
@@ -263,7 +283,7 @@ class Chess(object):
 
     def _load_pgn(self, filename: str) -> bool:
         x = 5
-        y = 5
+        y = 6
 
         try:
             pgn_file = PGNFile(filename)
@@ -293,9 +313,10 @@ class Chess(object):
     def _fileprompt(
         self,
         filename: Optional[str] = None,
-        handler: Optional[Callable[[str], bool]] = None):
+        handler: Optional[Callable[[str], bool]] = None,
+    ):
         x = 5
-        y = 4
+        y = 5
 
         if filename is None:
             filename = (
