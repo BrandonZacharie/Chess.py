@@ -1,19 +1,19 @@
 from concurrent.futures import ThreadPoolExecutor
 from tempfile import NamedTemporaryFile
-from typing import Any, Callable, List, Optional, Sequence, Tuple, Type
+from typing import Any, Callable, Generator, List, Optional, Sequence, Tuple, Type
 
 from pytest import mark, raises
-from semver import VersionInfo
 
 from game import (
     PIECE_NAME_TYPE_MAP,
+    AlgebraicNotationLogEntry,
     Cell,
     Direction,
-    FileType,
     Game,
     Knight,
     Pawn,
     PGNFile,
+    Queen,
     Query,
     Team,
     Turn,
@@ -23,7 +23,6 @@ from game.error import (
     IllegalMoveOutOfTurnError,
     IllegalMoveThroughCheckError,
 )
-from game.queen import Queen
 
 
 def test_loads():
@@ -180,7 +179,7 @@ def test_load_json_invalid_log(
     game = Game()
 
     for a, b in logs:
-        game.board.log.append(
+        game.board.ilog.append(
             (
                 game.point(a),
                 game.point(b) if isinstance(b, str) and len(b) == 2 else b,
@@ -227,17 +226,53 @@ def test_load_json_unsupported_version():
     ],
 )
 def test_load_pgn_file(filename: str):
-    game = Game()
+    def cleaned_pgn_moves(moves: Sequence[str]) -> Generator[str, Any, None]:
+        level = 0
 
-    game.load(filename, FileType.PGN)
+        for move in moves:
+            match move[0]:
+                case "(":
+                    level += 1
+
+                    continue
+                case ")":
+                    level -= 1
+
+                    continue
+                case "{":
+                    continue
+
+            if level > 0:
+                continue
+
+            match move:
+                case "0-1" | "1-0" | "1/2-1/2":
+                    continue
+
+            yield move
+
+    def cleaned_log_moves(
+        moves: Sequence[AlgebraicNotationLogEntry],
+    ) -> Generator[str, Any, None]:
+        for move in moves:
+            yield move[1]
+
+            if len(move) == 3:
+                yield move[2]
 
     pgn_file = PGNFile(filename)
-    count = len(pgn_file)
 
-    assert count > 0
+    assert len(pgn_file) > 0
 
     with ThreadPoolExecutor() as executor:
-        executor.map(pgn_file.game, range(count))
+        games = list(executor.map(pgn_file.game, range(len(pgn_file))))
+
+    for pgn_game, game in zip(pgn_file, games):
+        pgn_moves = list(cleaned_pgn_moves(pgn_game.moves))
+        log_moves = list(cleaned_log_moves(game.board.elog))
+
+        assert len(pgn_moves) == len(log_moves)
+        assert pgn_moves == log_moves
 
 
 def test_notify():

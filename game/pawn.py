@@ -72,7 +72,7 @@ class Pawn(Piece):
             return False
 
         try:
-            a, b = self.cell.board.log[-1]
+            a, b = self.cell.board.ilog[-1]
         except IndexError:
             return False
 

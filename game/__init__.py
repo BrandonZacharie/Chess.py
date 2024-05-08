@@ -2,8 +2,8 @@
 import game.board
 
 from .bishop import Bishop
-from .board import Board, Cell, Direction, Piece, Team
-from .game import PIECE_NAME_TYPE_MAP, FileType, Game, PGNFile, Query, Turn
+from .board import AlgebraicNotationLogEntry, Board, Cell, Direction, Piece, Team
+from .game import PIECE_NAME_TYPE_MAP, Game, PGNFile, Query, Turn
 from .king import King
 from .knight import Knight
 from .pawn import Pawn
@@ -11,11 +11,11 @@ from .queen import Queen
 from .rook import Rook
 
 __all__ = [
+    "AlgebraicNotationLogEntry",
     "Bishop",
     "Board",
     "Cell",
     "Direction",
-    "FileType",
     "Game",
     "King",
     "Knight",

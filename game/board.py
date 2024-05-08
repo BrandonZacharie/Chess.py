@@ -24,7 +24,8 @@ BoardSerializable: TypeAlias = List[List[CellSerializable]]
 Point: TypeAlias = Tuple[int, int]
 LogMove: TypeAlias = Tuple[Point, Point]
 LogEvent: TypeAlias = Tuple[Point, str]
-LogEntry: TypeAlias = Union[LogMove, LogEvent]
+AlgebraicNotationLogEntry: TypeAlias = Union[Tuple[str, str], Tuple[str, str, str]]
+PlainNotationLogEntry: TypeAlias = Union[LogMove, LogEvent]
 ST = TypeVar("ST", bound=Sequence[Point] | LogEvent)
 
 
@@ -54,6 +55,10 @@ class Team(Enum):
     @property
     def goal(self) -> int:
         return 0 if self is Team.BLACK else 7
+
+    @property
+    def opponent(self) -> Team:
+        return Team(not self.value)
 
 
 class Piece(ABC):
@@ -114,8 +119,8 @@ class Piece(ABC):
         }
 
 
-class Log(Generic[ST], List[ST]):
-    def entry(self, index: int) -> LogEntry:
+class PlainNotationLog(Generic[ST], List[ST]):
+    def entry(self, index: int) -> PlainNotationLogEntry:
         entry = self[index]
         e1, e2 = entry[0], entry[1]
         a1, b1 = e1
@@ -128,7 +133,6 @@ class Log(Generic[ST], List[ST]):
             a2, b2 = e2
 
             if isinstance(a2, int) and isinstance(b2, int):
-
                 # Return only the exact shape as is the return type.
                 return cast(LogMove, ((a1, b1), (a2, b2)))
 
@@ -277,7 +281,9 @@ class Board(List[List[Cell]]):
         else:
             template = [[None] * 8 for _ in range(8)]
 
-        self.log = Log[LogEntry]()
+        self.move_index = 0
+        self.elog: List[AlgebraicNotationLogEntry] = []
+        self.ilog = PlainNotationLog[PlainNotationLogEntry]()
         self.captures: Dict[Team, List[Piece]] = {Team.BLACK: [], Team.WHITE: []}
 
         def make_cell(x: int, y: int, t: Optional[Type[Piece]]) -> Cell:

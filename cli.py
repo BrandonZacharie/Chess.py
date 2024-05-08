@@ -59,10 +59,10 @@ def draw_board(window: CursesWindow, board: Board):
         window.addstr(y + 2, x + 1, "⌞" + " " * 33 + "⌟")
 
     """Draw the moves."""
-    draw_moves(window, board)
+    draw_elog(window, board)
 
 
-def draw_moves(window: CursesWindow, board: Board):
+def draw_ilog(window: CursesWindow, board: Board):
     def get_cell_name(indices: Tuple[int, int]) -> str:
         return board[indices[1]][indices[0]].name
 
@@ -70,7 +70,7 @@ def draw_moves(window: CursesWindow, board: Board):
         count = 0
         moves: List[List[str]] = []
 
-        for entry in board.log:
+        for entry in board.ilog:
             if type(entry[1]) is tuple:
                 move = cast(LogMove, entry)
 
@@ -121,6 +121,43 @@ def draw_moves(window: CursesWindow, board: Board):
 
             output_max = max(output_max, len(move) + 1 + prefix_max)
             lines += 1
+
+    window.addstr(y - 1, x + output_max + 1, "⌝")
+    window.addstr(y + length_max, x + output_max + 1, "⌟")
+
+
+def draw_elog(window: CursesWindow, board: Board):
+    lines = 0
+    x = 43
+    y = 5
+    columns = 1
+    prefix_max = 0
+    output_max = 8
+    length_max = 24
+
+    window.addstr(y - 1, x - 2, "⌜")
+    window.addstr(y + length_max, x - 2, "⌞")
+
+    for entry in reversed(board.elog):
+        prefix = entry[0]
+        prefix_max = max(prefix_max, len(prefix))
+        move = f"{entry[1]} {entry[2]}" if len(entry) == 3 else entry[1]
+
+        if lines + 1 > length_max:
+            if columns == 4:
+                break
+
+            x += output_max + 2
+            lines = 0
+            columns += 1
+
+        window.move(y + lines, x)
+        window.clrtoeol()
+        window.addstr(y + lines, x, prefix, A_BOLD)
+        window.addstr(y + lines, x + 1 + prefix_max, move)
+
+        output_max = max(output_max, len(move) + 1 + prefix_max)
+        lines += 1
 
     window.addstr(y - 1, x + output_max + 1, "⌝")
     window.addstr(y + length_max, x + output_max + 1, "⌟")

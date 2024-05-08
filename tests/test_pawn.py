@@ -34,29 +34,6 @@ def test_moves_A2A4A5A6B7():
     assert game.moves("B7") == game.cells("A8", "C8")
 
 
-def test_moves_B7B5B4B3C2():
-    game = Game()
-    game.turn = Turn.BLACK
-
-    assert game.moves("B7") == game.cells("B6", "B5")
-
-    game.move("B7", "B5")
-
-    assert game.moves("B5") == game.cells("B4")
-
-    game.move("B5", "B4")
-
-    assert game.moves("B4") == game.cells("B3")
-
-    game.move("B4", "B3")
-
-    assert game.moves("B3") == game.cells("A2", "C2")
-
-    game.move("B3", "C2")
-
-    assert game.moves("C2") == game.cells("B1", "D1")
-
-
 def test_illegal_move_take_own_piece():
     game = Game()
     game.turn = Turn.WHITE

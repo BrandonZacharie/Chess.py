@@ -29,10 +29,10 @@ from .board import (
     Cell,
     King,
     Knight,
-    Log,
     Move,
     Pawn,
     Piece,
+    PlainNotationLog,
     Point,
     Queen,
     Rook,
@@ -74,11 +74,6 @@ class Turn(Enum):
     BLACK = Team.BLACK
 
 
-class FileType(Enum):
-    PGN = "pgn"
-    JSON = "json"
-
-
 class Game:
     VERSION = VersionInfo(1, 0, 0)
 
@@ -118,9 +113,9 @@ class Game:
                     if self._first_turn != Turn.AUTO
                     else (
                         Turn.WHITE
-                        if self._board is None or len(self._board.log) == 0
+                        if self._board is None or len(self._board.ilog) == 0
                         else Turn(
-                            Team(Game().cell(self.board.log.entry(0)[0]).piece.team)
+                            Team(Game().cell(self.board.ilog.entry(0)[0]).piece.team)
                         )
                     )
                 )
@@ -132,12 +127,18 @@ class Game:
         self._next_turn = turn
 
     def find_playable_cell(
-        self, cls: type[Piece], team: Team, rof: Optional[str], dest: Query
+        self,
+        cls: type[Piece],
+        team: Team,
+        rof: Optional[str],
+        dest: Query,
+        ignorable: Optional[Piece] = None,
     ) -> Cell:
         for cells in self.board:
             for cell in cells:
                 if (
                     cell.piece is not None
+                    and cell.piece is not ignorable
                     and cell.piece.team is team
                     and isinstance(cell.piece, cls)
                     and (rof is None or rof in cell.name)
@@ -169,7 +170,7 @@ class Game:
             case 1:
                 data["board"] = self._board.serializable()
             case 2:
-                data["log"] = self._board.log
+                data["log"] = self._board.ilog
             case _:
                 raise ValueError("Invalid version")
 
@@ -217,7 +218,7 @@ class Game:
                                 has_moved = bool(piece["has_moved"])
                                 game.board[y][x].piece = type_map[kind](team, has_moved)
                 case 2:
-                    log: Log[List] = Log(data["log"])
+                    log: PlainNotationLog[List] = PlainNotationLog(data["log"])
                     size = len(log)
 
                     if size > 0:
@@ -283,15 +284,8 @@ class Game:
 
         return q1, q2, promo
 
-    def load(self, filename: str, filetype: FileType = FileType.JSON):
-        game: Optional[Game] = None
-
-        match filetype:
-            case FileType.PGN:
-                game = PGNFile(filename).game()
-
-            case FileType.JSON:
-                game = self.parse_json_file(filename)
+    def load(self, filename: str):
+        game = self.parse_json_file(filename)
 
         if game is not None:
             Game.__init__(self, game)
@@ -386,6 +380,18 @@ class Game:
             if self.turn != turn:
                 raise IllegalMoveOutOfTurnError(cell1, cell2)
 
+            t = type(piece)
+
+            try:
+                twin_cell = (
+                    self.find_playable_cell(t, piece.team, None, cell2, piece)
+                    if can_commit
+                    else None
+                )
+            except ValueError:
+                twin_cell = None
+
+            elog_move: str
             x = cell1.x - cell2.x
             main_move = self.board.move_piece(piece, cell2)
             rook_cell = self.board[cell2.y][0 if x > 0 else 7]
@@ -400,13 +406,57 @@ class Game:
                         rook_piece,
                         cell2.left() if rook_cell.x > cell2.x else cell2.right(),
                     )
+                    elog_move = "O-O" if x < 0 else "O-O-O"
                 finally:
                     piece.is_castling = False
+            else:
+                if t is Pawn:
+                    elog_move = (
+                        ""
+                        if main_move.taken_piece is None
+                        else f"{cell1.name[0]}x".lower()
+                    )
+
+                    # TODO: Append annotation for En passant take.
+                else:
+                    elog_move = PIECE_TYPE_NAME_MAP[t]
+
+                    if twin_cell is not None:
+                        elog_move += (
+                            cell1.name[1] if twin_cell.x == cell1.x else cell1.name[0]
+                        ).lower()
+
+                    if main_move.taken_piece is not None:
+                        elog_move += "x"
+
+                elog_move += cell2.name.lower()
+
+            try:
+                if not self.board.get_king(piece.team.opponent).is_safe:
+                    elog_move += "+"
+            except IndexError:
+                pass
+
+            # TODO: Append annotation for Checkmate.
 
             if can_commit:
                 self._last_turn = turn
 
-                self.board.log.append((cell1.point, cell2.point))
+                if turn == Turn.WHITE:
+                    self.board.elog.append((f"{self.board.move_index + 1}.", elog_move))
+                else:
+                    elog_entry = self.board.elog[-1]
+
+                    if len(elog_entry) == 2:
+                        self.board.elog[-1] = (elog_entry[0], elog_entry[1], elog_move)
+                    else:
+                        self.board.elog.append(
+                            (f"{self.board.move_index}...", elog_move)
+                        )
+
+                    self.board.move_index += 1
+
+                self.board.ilog.append((cell1.point, cell2.point))
                 self.notify("move", main_move)
             else:
                 reverse()
@@ -430,8 +480,29 @@ class Game:
             raise IllegalPromotionTypeError(cell, t)
 
         cell.piece = t(cell.piece.team, has_moved=True)
+        piece_name = PIECE_TYPE_NAME_MAP[t]
+        elog_entry = self.board.elog[-1]
 
-        self.board.log.append((cell.point, PIECE_TYPE_NAME_MAP[t]))
+        def annotate(elog_move: str) -> str:
+            """Add promotion notation and move check notation to the end if present."""
+
+            return (
+                f"{elog_move[:-1]}={piece_name}+"
+                if elog_move[-1] == "+"
+                else (
+                    f"{elog_move}={piece_name}+"
+                    if not self.board.get_king(cell.piece.team.opponent).is_safe
+                    else f"{elog_move}={piece_name}"
+                )
+            )
+
+        self.board.elog[-1] = (
+            (elog_entry[0], annotate(elog_entry[1]))
+            if len(elog_entry) == 2
+            else (elog_entry[0], elog_entry[1], annotate(elog_entry[2]))
+        )
+
+        self.board.ilog.append((cell.point, piece_name))
         self.notify("promote")
 
     def moves(self, q: Query) -> Set[Cell]:
@@ -479,20 +550,20 @@ class PGNFile(List[PGNGame]):
 
     def game(self, index: int = -1) -> Game:
         game = Game()
-        can_parse = True
+        level = 0
 
         for pgn_move in self[index].moves:
-            if not can_parse:
-                continue
-
             if pgn_move == "(":
-                can_parse = False
+                level += 1
 
                 continue
 
             if pgn_move == ")":
-                can_parse = True
+                level -= 1
 
+                continue
+
+            if level > 0:
                 continue
 
             move = game.parse_pgn_move(pgn_move)
