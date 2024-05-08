@@ -1,4 +1,5 @@
 from curses import (
+    A_BOLD,
     A_COLOR,
     A_DIM,
     A_NORMAL,
@@ -27,7 +28,7 @@ from functools import partial
 from os import getcwd, path
 from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, TypeAlias, cast
 
-from cli import draw_head, main
+from cli import LogStyle, draw_head, main
 from dateutil.parser import parse
 
 from game import Game, PGNFile
@@ -192,8 +193,13 @@ class Menu(object):
             pass
 
 
+class Configuration:
+    log_style = LogStyle.CoordinateNotation
+
+
 class Chess(object):
     def __init__(self, window: CursesWindow):
+        check_window_maxyx(window)
         draw_head(window)
 
         class Menus:
@@ -201,6 +207,7 @@ class Chess(object):
                 [
                     ("new game", self.play),
                     ("load file", self.draw_load_menu),
+                    ("options", self.draw_cfg_menu),
                     ("about", self.draw_about),
                 ],
                 window,
@@ -221,12 +228,72 @@ class Chess(object):
                 window,
                 "save file",
             )
+            cfg = Menu(
+                [
+                    ("log style", self.draw_cfg_log_style_menu),
+                ],
+                window,
+                "options",
+            )
 
         self.window = window
         self.game: Optional[Game] = None
         self.menus = Menus()
+        self.cfg = Configuration()
 
         self.menus.root.display()
+
+    def draw_save_menu(self):
+        self.menus.save.display()
+
+        self.menus.save.position = 0
+
+    def draw_load_menu(self):
+        self.menus.load.display()
+
+        self.menus.load.position = 0
+
+    def draw_cfg_menu(self):
+        self.menus.cfg.display()
+
+        self.menus.cfg.position = 0
+
+    def draw_cfg_log_style_menu(self):
+        def set_style(style: LogStyle):
+            self.cfg.log_style = style
+
+            raise KeyboardInterrupt
+
+        menu = Menu(
+            [
+                (
+                    label,
+                    partial(set_style, log_style),
+                    A_BOLD if self.cfg.log_style == log_style else 0,
+                )
+                for log_style, label in (
+                    (LogStyle.CoordinateNotation, "Coordinates"),
+                    (LogStyle.AlgebraicNotation, "Algebraic Notation"),
+                )
+            ],
+            self.window,
+            "options/log style",
+        )
+
+        menu.position = self.cfg.log_style.value
+
+        menu.display()
+
+    def draw_about(self):
+        y = 4
+
+        self.window.move(y, 0)
+        self.window.clrtobot()
+        self.window.addstr(y + 0, 6, f"© 2021 Brandon Zacharie", A_COLOR)
+        self.window.addstr(y + 2, 6, "github: BrandonZacharie/Chess.py", A_COLOR)
+        self.window.addstr(y + 3, 6, f"semver: {Game.VERSION}", A_COLOR)
+        self.window.addstr(y + 5, 6, "Press any key to continue...")
+        self.window.getch()
 
     def play(self, game: Optional[Game] = None):
         if self.game is None:
@@ -235,14 +302,9 @@ class Chess(object):
 
         self.game = Game() if game is None else game
 
-        main(self.window, self.game)
+        main(self.window, self.game, self.cfg.log_style)
 
         self.menus.root.position = 0
-
-    def draw_save_menu(self):
-        self.menus.save.display()
-
-        self.menus.save.position = 0
 
     def save_pgn(self):
         pass
@@ -251,11 +313,6 @@ class Chess(object):
         self._fileprompt(handler=self._save_json)
 
         raise KeyboardInterrupt
-
-    def draw_load_menu(self):
-        self.menus.load.display()
-
-        self.menus.load.position = 0
 
     def load_pgn(self):
         self._fileprompt(handler=self._load_pgn)
@@ -404,17 +461,6 @@ class Chess(object):
             self.window.move(y, cursor + x)
 
         raise KeyboardInterrupt
-
-    def draw_about(self):
-        y = 4
-
-        self.window.move(y, 0)
-        self.window.clrtobot()
-        self.window.addstr(y + 0, 6, f"© 2021 Brandon Zacharie", A_COLOR)
-        self.window.addstr(y + 2, 6, "github: BrandonZacharie/Chess.py", A_COLOR)
-        self.window.addstr(y + 3, 6, f"semver: {Game.VERSION}", A_COLOR)
-        self.window.addstr(y + 5, 6, "Press any key to continue...")
-        self.window.getch()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
-from curses import A_BOLD, A_UNDERLINE, KEY_DOWN, KEY_ENTER, KEY_UP, curs_set, wrapper
-from curses.ascii import ESC, LF
-from enum import Enum
+from curses import A_BOLD, A_UNDERLINE, curs_set, wrapper
+from curses.ascii import ESC
+from enum import IntEnum
 from itertools import zip_longest
 from typing import TYPE_CHECKING, List, Optional, Tuple, cast
 
@@ -21,7 +21,12 @@ else:
 BOARD_CELL_ORDS = [ord(ch) for ch in "12345678ABCDEFGHabcdefgh"]
 
 
-class InputMode(Enum):
+class LogStyle(IntEnum):
+    CoordinateNotation = 0
+    AlgebraicNotation = 1
+
+
+class InputMode(IntEnum):
     PAUSED = 0
     SELECT_CELL = 1
     SELECT_DEST = 2
@@ -32,7 +37,7 @@ def draw_head(window: CursesWindow):
     window.addstr(2, 5, " Chess.py ", A_BOLD | A_UNDERLINE)
 
 
-def draw_board(window: CursesWindow, board: Board):
+def draw_board(window: CursesWindow, board: Board, log_style: LogStyle):
     x = 5
     y = 7
 
@@ -59,7 +64,11 @@ def draw_board(window: CursesWindow, board: Board):
         window.addstr(y + 2, x + 1, "⌞" + " " * 33 + "⌟")
 
     """Draw the moves."""
-    draw_elog(window, board)
+    match log_style:
+        case LogStyle.CoordinateNotation:
+            draw_ilog(window, board)
+        case LogStyle.AlgebraicNotation:
+            draw_elog(window, board)
 
 
 def draw_ilog(window: CursesWindow, board: Board):
@@ -258,7 +267,11 @@ def get_input(window: CursesWindow, mode: InputMode) -> List[int]:
     return input
 
 
-def main(window: CursesWindow, game: Game = Game()):
+def main(
+    window: CursesWindow,
+    game: Game = Game(),
+    log_style: LogStyle = LogStyle.CoordinateNotation,
+):
     mode = InputMode.SELECT_CELL
     q1 = ""
     q2 = ""
@@ -267,7 +280,7 @@ def main(window: CursesWindow, game: Game = Game()):
     window.move(0, 0)
     window.clrtobot()
     draw_head(window)
-    draw_board(window, game.board)
+    draw_board(window, game.board, log_style)
 
     while True:
         draw_notes(window, game, mode)
@@ -294,7 +307,7 @@ def main(window: CursesWindow, game: Game = Game()):
                 except IllegalMoveError as e:
                     draw_input_err(window, e)
                 else:
-                    draw_board(window, game.board)
+                    draw_board(window, game.board, log_style)
                     draw_input_cursor(window, mode)
                     window.clrtoeol()
 
@@ -306,7 +319,7 @@ def main(window: CursesWindow, game: Game = Game()):
                 except KeyError:
                     draw_input_err(window, "Invalid input.")
                 else:
-                    draw_board(window, game.board)
+                    draw_board(window, game.board, log_style)
 
                     mode = InputMode.SELECT_CELL
 
