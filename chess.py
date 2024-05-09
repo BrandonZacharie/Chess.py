@@ -418,6 +418,7 @@ class Chess(object):
                     continue
                 case KeyCode.ENTER | KeyCode.EOL | KeyCode.LF:
                     self.window.addstr(y + 2, x, "Loading...", A_COLOR)
+                    self.window.clrtoeol()
                     self.window.refresh()
 
                     if handler is None or handler(prompt[1:]):
