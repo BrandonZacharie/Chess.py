@@ -25,6 +25,7 @@ from curses import (
 from curses.ascii import BS, DEL, ENQ, ESC, LF, SOH, VT
 from enum import IntEnum
 from functools import partial
+from math import floor
 from os import getcwd, path
 from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, TypeAlias, cast
 
@@ -132,12 +133,12 @@ class Menu(object):
 
         self._pages = None
 
-    def navigate(self, n) -> None:
+    def navigate(self, n: int) -> None:
         self.position += n
         prev_page = self.page
 
         if self.position < 0:
-            self.page = max(0, self.page - 1)
+            self.page = max(0, self.page + floor(self.position / self.page_size))
             next_page_size = len(self.pages[self.page])
             self.position = (
                 0 if self.page == prev_page else max(self.position + next_page_size, 0)
@@ -148,7 +149,10 @@ class Menu(object):
         prev_page_size = len(self.pages[prev_page])
 
         if self.position >= prev_page_size:
-            self.page = min(len(self.items) // self.page_size, self.page + 1)
+            self.page = min(
+                len(self.items) // self.page_size,
+                self.page + floor(self.position / self.page_size),
+            )
             next_page_size = len(self.pages[self.page])
             self.position = (
                 next_page_size - 1
@@ -208,7 +212,11 @@ class Menu(object):
                         self.navigate(1)
                     case KeyCode.NPAGE:
                         self.navigate(self.page_size)
-                    case KeyCode.EXIT | KeyCode.HOME | KeyCode.ESC:
+                    case KeyCode.HOME:
+                        self.navigate(-len(self.items))
+                    case KeyCode.END:
+                        self.navigate(len(self.items))
+                    case KeyCode.EXIT | KeyCode.ESC:
                         break
 
                 self.window.clear()
