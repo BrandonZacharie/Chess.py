@@ -47,6 +47,32 @@ MenuItems: TypeAlias = List[
 ]
 
 
+def check_window_maxyx(window: CursesWindow, maxyx: Tuple[int, int] = (40, 40)) -> bool:
+    attempts = 0
+
+    while True:
+        y, x = window.getmaxyx()
+
+        if x < maxyx[1] or y < maxyx[0]:
+            window.addstr(
+                0,
+                0,
+                "window is too small… press any key to retry "
+                + (f"({attempts})" if attempts > 0 else ""),
+                A_COLOR,
+            )
+            window.refresh()
+            window.getch()
+
+            attempts += 1
+        else:
+            window.clear()
+
+            break
+
+    return attempts > 0
+
+
 class KeyCode(IntEnum):
     BACKSPACE = KEY_BACKSPACE
     DC = KEY_DC
