@@ -18,7 +18,7 @@ from typing import (
     cast,
 )
 
-from pgn import PGNGame  # type: ignore
+from pgn import PGNGame
 from pgn import loads as pgn_loads
 from semver import VersionInfo
 
