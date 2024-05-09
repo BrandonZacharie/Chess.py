@@ -482,3 +482,18 @@ def test_illegal_move_through_check():
 
     with raises(IllegalMoveThroughCheckError):
         game.move("E8", "C8")
+
+
+def test_revert_castling_move():
+    game = Game()
+
+    game.move("E2", "E4")
+    game.move("E7", "E5")
+    game.move("G1", "F3")
+    game.move("B8", "C6")
+    game.move("F1", "C4")
+    game.move("G8", "F6")
+
+    assert game.move("E1", "G1", can_commit=False)
+    assert game.cell("E1").piece.name == "King"
+    assert game.cell("H1").piece.name == "Rook"
