@@ -6,12 +6,6 @@ A simple Chess engine.
 
 ### Setup (MacOS)
 
-Install Stockfish.
-
-```bash
-brew install stockfish
-```
-
 Create virtual environment.
 
 ```bash
