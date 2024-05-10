@@ -451,7 +451,7 @@ class Game:
                         self.board.elog[-1] = (elog_entry[0], elog_entry[1], elog_move)
                     else:
                         self.board.elog.append(
-                            (f"{self.board.move_index}...", elog_move)
+                            (f"{self.board.move_index + 1}...", elog_move)
                         )
 
                     self.board.move_index += 1
