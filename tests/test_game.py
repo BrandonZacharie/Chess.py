@@ -497,3 +497,52 @@ def test_revert_castling_move():
     assert game.move("E1", "G1", can_commit=False)
     assert game.cell("E1").piece.name == "King"
     assert game.cell("H1").piece.name == "Rook"
+
+
+def test_add_comment():
+    game = Game()
+
+    game.add_comment(" ")
+    game.add_comment("This is a comment.")
+
+    assert game.board.elog[-1] == ("1.", "{This is a comment.}")
+
+    game.move("E2", "E4")
+    game.move("E7", "E5")
+    game.move("G1", "F3")
+    game.move("B8", "C6")
+    game.move("F1", "C4")
+    game.move("G8", "F6")
+    game.move("A2", "A4")
+    game.add_comment("This is a comment.")
+
+    assert game.board.elog[-1] == ("4.", "a4", "{This is a comment.}")
+
+    game.move("B7", "B5")
+
+    assert game.board.elog[-1] == ("4...", "b5")
+
+    game.add_comment("This is a comment.")
+
+    assert game.board.elog[-1] == ("4...", "b5", "{This is a comment.}")
+
+    game.add_comment("This is a comment.")
+
+    assert game.board.elog[-1] == (
+        "4...",
+        "b5",
+        "{This is a comment. This is a comment.}",
+    )
+
+    game.move("A4", "A5")
+    game.add_comment("This is a comment.")
+
+    assert game.board.elog[-1] == ("5.", "a5", "{This is a comment.}")
+
+    game.add_comment("This is a comment.")
+
+    assert game.board.elog[-1] == (
+        "5.",
+        "a5",
+        "{This is a comment. This is a comment.}",
+    )

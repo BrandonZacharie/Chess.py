@@ -126,6 +126,24 @@ class Game:
     def turn(self, turn: Turn):
         self._next_turn = turn
 
+    def add_comment(self, comment: str):
+        comment = comment.strip()
+
+        if len(comment) == 0:
+            return
+
+        if len(self.board.elog) == 0:
+            self.board.elog.append((f"{self.board.move_index + 1}.", f"{{{comment}}}"))
+
+            return
+
+        elog_entry = self.board.elog[-1]
+
+        if len(elog_entry) == 3:
+            comment = f"{elog_entry[2][1:-1]} {comment}"
+
+        self.board.elog[-1] = (elog_entry[0], elog_entry[1], f"{{{comment}}}")
+
     def find_playable_cell(
         self,
         cls: type[Piece],
