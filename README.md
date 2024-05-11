@@ -2,6 +2,8 @@
 
 A simple Chess engine.
 
+[![Coverage Status](https://coveralls.io/repos/github/BrandonZacharie/Chess.py/badge.svg?branch=main)](https://coveralls.io/github/BrandonZacharie/Chess.py?branch=main)
+
 ## Develop
 
 ### Setup (MacOS)
