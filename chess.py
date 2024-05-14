@@ -27,7 +27,7 @@ from enum import IntEnum
 from functools import partial
 from math import floor
 from os import getcwd, path
-from typing import Callable, List, Optional, Tuple, TypeAlias, cast
+from typing import Callable, List, Optional, Sequence, Tuple, TypeAlias, cast
 
 from cli import LogStyle, draw_head, main
 from dateutil.parser import parse
@@ -37,6 +37,14 @@ from game import Game, PGNFile
 MenuItems: TypeAlias = List[
     Tuple[str, Optional[Callable]] | Tuple[str, Optional[Callable], int]
 ]
+
+
+def draw_breadcrumbs(
+    window: Window, coordinates: Tuple[int, int], *breadcrumbs: str
+):
+    x, y = coordinates
+
+    window.addstr(y, x, "↳ " + " 〉".join(breadcrumbs))
 
 
 def check_window_maxyx(window: Window, maxyx: Tuple[int, int] = (40, 40)) -> bool:
@@ -93,7 +101,7 @@ class Menu(object):
         self,
         items: MenuItems,
         window: Window,
-        title: Optional[str] = None,
+        title: Optional[Sequence[str]] = None,
     ):
         self._pages: Optional[List[MenuItems]] = None
         self.window = window.subwin(3, 4)
@@ -165,7 +173,7 @@ class Menu(object):
                 y = 0
 
                 if self.title is not None:
-                    self.window.addstr(y, 2, "↳ " + self.title)
+                    draw_breadcrumbs(self.window, (2, y), *self.title)
 
                     y += 1
 
@@ -244,7 +252,7 @@ class Chess(object):
                     ("JSON", self.load_json),
                 ],
                 window,
-                "load file",
+                ("load file",),
             )
             save = Menu(
                 [
@@ -252,14 +260,14 @@ class Chess(object):
                     ("JSON", self.save_json),
                 ],
                 window,
-                "save file",
+                ("save file",),
             )
             cfg = Menu(
                 [
                     ("log style", self.draw_cfg_log_style_menu),
                 ],
                 window,
-                "options",
+                ("options",),
             )
 
         self.window = window
@@ -303,7 +311,7 @@ class Chess(object):
                 )
             ],
             self.window,
-            "options/log style",
+            ("options", "log style"),
         )
 
         menu.position = self.cfg.log_style.value
@@ -333,19 +341,31 @@ class Chess(object):
         self.menus.root.position = 0
 
     def save_pgn(self):
+        if self.menus.save.title is not None:
+            draw_breadcrumbs(self.window, (6, 3), *self.menus.save.title, "PGN")
+
         self._fileprompt(handler=self._save_pgn)
 
         raise KeyboardInterrupt
 
     def save_json(self):
+        if self.menus.save.title is not None:
+            draw_breadcrumbs(self.window, (6, 3), *self.menus.save.title, "JSON")
+
         self._fileprompt(handler=self._save_json)
 
         raise KeyboardInterrupt
 
     def load_pgn(self):
+        if self.menus.load.title is not None:
+            draw_breadcrumbs(self.window, (6, 3), *self.menus.load.title, "PGN")
+
         self._fileprompt(handler=self._load_pgn)
 
     def load_json(self):
+        if self.menus.load.title is not None:
+            draw_breadcrumbs(self.window, (6, 3), *self.menus.load.title, "JSON")
+
         self._fileprompt(handler=self._load_json)
 
     def _save_json(self, filename: str) -> bool:
