@@ -18,13 +18,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import cli as cli_mod
-from cli import (
+import interface.game as cli_mod
+from interface.draw import draw_head
+from interface.game import (
     InputMode,
     LogStyle,
     draw_board,
     draw_elog,
-    draw_head,
     draw_ilog,
     draw_input,
     draw_input_cursor,
@@ -569,7 +569,7 @@ class TestMainPromotionEndToEnd:
 
 class TestRun:
     def test_run_delegates_to_curses_wrapper_with_main(self):
-        from cli import run
+        from interface.game import run
 
         with patch.object(cli_mod, "wrapper") as wrapper_mock:
             run()

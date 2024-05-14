@@ -1,230 +1,15 @@
-from curses import (
-    A_BOLD,
-    A_COLOR,
-    A_NORMAL,
-    A_REVERSE,
-    KEY_BACKSPACE,
-    KEY_DC,
-    KEY_DOWN,
-    KEY_END,
-    KEY_ENTER,
-    KEY_EOL,
-    KEY_EXIT,
-    KEY_HOME,
-    KEY_LEFT,
-    KEY_NPAGE,
-    KEY_PPAGE,
-    KEY_RIGHT,
-    KEY_UP,
-    curs_set,
-    doupdate,
-    panel,
-    wrapper,
-)
-from curses.ascii import BS, DEL, ENQ, ESC, LF, SOH, VT
+from curses import A_BOLD, A_COLOR, A_DIM, wrapper
 from curses import window as Window
-from enum import IntEnum
 from functools import partial
-from math import floor
-from os import getcwd, path
-from typing import Callable, List, Optional, Sequence, Tuple, TypeAlias, cast
+from typing import Callable, Optional, cast
 
-from cli import LogStyle, draw_head, main
 from dateutil.parser import parse
+from interface.draw import check_window_maxyx, draw_breadcrumbs
+from interface.game import LogStyle, draw_head, main
+from interface.input import fileprompt
+from interface.menu import Menu
 
 from game import Game, PGNFile
-
-MenuItems: TypeAlias = List[
-    Tuple[str, Optional[Callable]] | Tuple[str, Optional[Callable], int]
-]
-
-
-def draw_breadcrumbs(
-    window: Window, coordinates: Tuple[int, int], *breadcrumbs: str
-):
-    x, y = coordinates
-
-    window.addstr(y, x, "↳ " + " 〉".join(breadcrumbs))
-
-
-def check_window_maxyx(window: Window, maxyx: Tuple[int, int] = (40, 40)) -> bool:
-    attempts = 0
-
-    while True:
-        y, x = window.getmaxyx()
-
-        if x < maxyx[1] or y < maxyx[0]:
-            window.addstr(
-                0,
-                0,
-                "window is too small… press any key to retry "
-                + (f"({attempts})" if attempts > 0 else ""),
-                A_COLOR,
-            )
-            window.refresh()
-            window.getch()
-
-            attempts += 1
-        else:
-            window.clear()
-
-            break
-
-    return attempts > 0
-
-
-class KeyCode(IntEnum):
-    BACKSPACE = KEY_BACKSPACE
-    DC = KEY_DC
-    DOWN = KEY_DOWN
-    END = KEY_END
-    ENTER = KEY_ENTER
-    EOL = KEY_EOL
-    EXIT = KEY_EXIT
-    HOME = KEY_HOME
-    LEFT = KEY_LEFT
-    NPAGE = KEY_NPAGE
-    PPAGE = KEY_PPAGE
-    RIGHT = KEY_RIGHT
-    UP = KEY_UP
-    BS = BS
-    DEL = DEL
-    ENQ = ENQ
-    ESC = ESC
-    LF = LF
-    SOH = SOH
-    VT = VT
-
-
-class Menu(object):
-    def __init__(
-        self,
-        items: MenuItems,
-        window: Window,
-        title: Optional[Sequence[str]] = None,
-    ):
-        self._pages: Optional[List[MenuItems]] = None
-        self.window = window.subwin(3, 4)
-        self.title = title
-        self.position = 0
-        self.page = 0
-        self.page_size = 25
-        self.items = list(items)
-        self.panel = panel.new_panel(self.window)
-
-        self.items.append(("exit", None))
-        self.panel.hide()
-        panel.update_panels()
-        self.window.keypad(True)
-
-    @property
-    def pages(self) -> List[MenuItems]:
-        if self._pages is None:
-            self._pages = [
-                self.items[i : i + self.page_size]
-                for i in range(0, len(self.items), self.page_size)
-            ]
-
-        return self._pages
-
-    def insert(self, index: int, item: Tuple[str, Optional[Callable]]):
-        self.items.insert(index, item)
-
-        self._pages = None
-
-    def navigate(self, n: int) -> None:
-        self.position += n
-        prev_page = self.page
-
-        if self.position < 0:
-            self.page = max(0, self.page + floor(self.position / self.page_size))
-            next_page_size = len(self.pages[self.page])
-            self.position = (
-                0 if self.page == prev_page else max(self.position + next_page_size, 0)
-            )
-
-            return
-
-        prev_page_size = len(self.pages[prev_page])
-
-        if self.position >= prev_page_size:
-            self.page = min(
-                len(self.pages) - 1,
-                self.page + floor(self.position / self.page_size),
-            )
-            next_page_size = len(self.pages[self.page])
-            self.position = (
-                next_page_size - 1
-                if self.page == prev_page
-                else min(self.position - prev_page_size, next_page_size - 1)
-            )
-
-    def display(self) -> None:
-        self.panel.top()
-        self.panel.show()
-        self.window.clear()
-
-        try:
-            while True:
-                self.window.refresh()
-                doupdate()
-                curs_set(0)
-
-                y = 0
-
-                if self.title is not None:
-                    draw_breadcrumbs(self.window, (2, y), *self.title)
-
-                    y += 1
-
-                y += 1
-
-                for index, item in enumerate(self.pages[self.page]):
-                    msg = (
-                        f" ↵  {item[0]}  "
-                        if item[1] is None
-                        else " %d. %s  "
-                        % (index + 1 + (self.page * self.page_size), item[0])
-                    )
-                    mode = A_REVERSE if index == self.position else A_NORMAL
-
-                    if len(item) == 3:
-                        mode |= item[2]
-
-                    self.window.addstr(y + index, 1, msg, mode)
-
-                key = self.window.getch()
-
-                match key:
-                    case KeyCode.ENTER | KeyCode.LF:
-                        fn = self.items[self.position][1]
-
-                        if fn is None:
-                            break
-
-                        fn()
-                    case KeyCode.UP:
-                        self.navigate(-1)
-                    case KeyCode.PPAGE:
-                        self.navigate(-self.page_size)
-                    case KeyCode.DOWN:
-                        self.navigate(1)
-                    case KeyCode.NPAGE:
-                        self.navigate(self.page_size)
-                    case KeyCode.HOME:
-                        self.navigate(-len(self.items))
-                    case KeyCode.END:
-                        self.navigate(len(self.items))
-                    case KeyCode.EXIT | KeyCode.ESC:
-                        break
-
-                self.window.clear()
-        except KeyboardInterrupt:
-            pass
-
-        self.panel.hide()
-        panel.update_panels()
-        doupdate()
 
 
 class Configuration:
@@ -340,6 +125,13 @@ class Chess(object):
 
         self.menus.root.position = 0
 
+    def _fileprompt(
+        self,
+        filename: Optional[str] = None,
+        handler: Optional["Callable[[str], bool]"] = None,
+    ):
+        fileprompt(self.window, filename, handler)
+
     def save_pgn(self):
         if self.menus.save.title is not None:
             draw_breadcrumbs(self.window, (6, 3), *self.menus.save.title, "PGN")
@@ -450,86 +242,6 @@ class Chess(object):
             self.window.addstr(y + 2, x, f"Error: {e}", A_COLOR)
 
         return False
-
-    def _fileprompt(
-        self,
-        filename: Optional[str] = None,
-        handler: Optional[Callable[[str], bool]] = None,
-    ):
-        x = 5
-        y = 5
-
-        if filename is None:
-            filename = (
-                path.realpath(path.join(getcwd(), path.dirname(__file__))) + path.sep
-            )
-
-        prompt = "〉" + filename
-
-        self.window.move(y, x)
-        self.window.clrtobot()
-        self.window.addstr(y, x, "Enter the file path: ")
-
-        y += 1
-        cursor = len(prompt) + 1
-
-        self.window.addstr(y, x, prompt)
-        curs_set(2)
-
-        while True:
-            match self.window.getch():
-                case KeyCode.EXIT | KeyCode.ESC:
-                    break
-                case KeyCode.DOWN | KeyCode.UP:
-                    continue
-                case KeyCode.ENTER | KeyCode.EOL | KeyCode.LF:
-                    self.window.addstr(y + 2, x, "Loading...", A_COLOR)
-                    self.window.clrtoeol()
-                    self.window.refresh()
-
-                    if handler is None or handler(prompt[1:]):
-                        return
-
-                    self.window.clrtobot()
-                case KeyCode.LEFT:
-                    if cursor > 2:
-                        cursor -= 1
-                case KeyCode.RIGHT:
-                    if cursor < len(prompt) + 1:
-                        cursor += 1
-                case KeyCode.VT:
-                    prompt = prompt[: cursor - 1]
-
-                    self.window.addstr(y, x, prompt)
-                    self.window.clrtoeol()
-                case KeyCode.HOME | KeyCode.SOH:
-                    cursor = 2
-                case KeyCode.END | KeyCode.ENQ:
-                    cursor = len(prompt) + 1
-                case KeyCode.BACKSPACE | KeyCode.BS | KeyCode.DEL:
-                    if cursor > 2:
-                        prompt = prompt[: cursor - 2] + prompt[cursor - 1 :]
-                        cursor -= 1
-
-                        self.window.addstr(y, x, prompt)
-                        self.window.clrtoeol()
-                case KeyCode.DC:
-                    if cursor < len(prompt) + 1:
-                        prompt = prompt[: cursor - 1] + prompt[cursor:]
-
-                        self.window.addstr(y, x, prompt)
-                        self.window.clrtoeol()
-                case key if 0 <= key < 0x100:
-                    prompt = prompt[: cursor - 1] + chr(key) + prompt[cursor - 1 :]
-                    cursor += 1
-
-                    self.window.addstr(y, x, prompt)
-                case _:
-                    pass
-
-            self.window.move(y, cursor + x)
-
-        raise KeyboardInterrupt
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -21,7 +21,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import chess as chess_mod
-from chess import Chess, Configuration, KeyCode, Menu, check_window_maxyx
+from chess import Chess, Configuration
+from interface.draw import check_window_maxyx
+from interface.input import KeyCode
+from interface.menu import Menu
 from game import Game
 
 
@@ -59,17 +62,22 @@ def queue_keys(window: MagicMock, keys: Iterable[int]) -> None:
 
 @pytest.fixture
 def curses_patches():
-    """Patch module-level curses helpers used by chess.py."""
+    """Patch module-level curses helpers used by the interface package."""
+    import interface.menu as menu_mod
+    import interface.input as input_mod
+
     with (
-        patch.object(chess_mod, "panel") as panel_mock,
-        patch.object(chess_mod, "doupdate") as doupdate_mock,
-        patch.object(chess_mod, "curs_set") as curs_set_mock,
+        patch.object(menu_mod, "panel") as panel_mock,
+        patch.object(menu_mod, "doupdate") as doupdate_mock,
+        patch.object(menu_mod, "curs_set") as curs_set_menu_mock,
+        patch.object(input_mod, "curs_set") as curs_set_input_mock,
     ):
         panel_mock.new_panel.side_effect = lambda *_a, **_kw: MagicMock(name="panel")
         yield {
             "panel": panel_mock,
             "doupdate": doupdate_mock,
-            "curs_set": curs_set_mock,
+            "curs_set": curs_set_menu_mock,
+            "curs_set_input": curs_set_input_mock,
         }
 
 
@@ -288,7 +296,7 @@ class TestMenuDisplay:
 
 class TestConfiguration:
     def test_default_log_style(self):
-        from cli import LogStyle
+        from interface.game import LogStyle
 
         cfg = Configuration()
         assert cfg.log_style is LogStyle.CoordinateNotation
@@ -590,7 +598,7 @@ class TestLoadPgn:
 class TestMenuRendering:
     def test_title_is_rendered_when_present(self, curses_patches):
         window = make_window(getch_keys=[int(KeyCode.ESC)])
-        menu = Menu([("one", lambda: None)], window, title="Settings")
+        menu = Menu([("one", lambda: None)], window, title=("Settings",))
         menu.display()
 
         rendered = " ".join(
@@ -688,7 +696,7 @@ class TestChessDrawMenus:
         chess_instance.draw_cfg_log_style_menu()
         # The set_style branch ran; log_style is now an instance attribute
         # equal to LogStyle.CoordinateNotation.
-        from cli import LogStyle
+        from interface.game import LogStyle
 
         assert chess_instance.cfg.log_style == LogStyle.CoordinateNotation
 
