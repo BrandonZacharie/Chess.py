@@ -60,6 +60,14 @@ def queue_keys(window: MagicMock, keys: Iterable[int]) -> None:
     window.subwin.return_value.getch.side_effect = lambda: next(it)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_chessrc(tmp_path, monkeypatch):
+    """Redirect Configuration's default ~/.chessrc into a per-test tmp_path
+    so tests never read from or write to the real user home directory.
+    """
+    monkeypatch.setattr(chess_mod.Path, "home", lambda: tmp_path)
+
+
 @pytest.fixture
 def curses_patches():
     """Patch module-level curses helpers used by the interface package."""
@@ -300,6 +308,41 @@ class TestConfiguration:
 
         cfg = Configuration()
         assert cfg.log_style is LogStyle.CoordinateNotation
+
+    def test_first_creation_writes_default_to_disk(self, tmp_path):
+        from interface.game import LogStyle
+
+        filepath = tmp_path / ".chessrc"
+        assert not filepath.exists()
+
+        Configuration(filepath)
+
+        assert filepath.exists()
+        assert (
+            filepath.read_text()
+            == f"log_style={LogStyle.CoordinateNotation.name}"
+        )
+
+    def test_existing_file_is_loaded(self, tmp_path):
+        from interface.game import LogStyle
+
+        filepath = tmp_path / ".chessrc"
+        filepath.write_text(f"log_style={LogStyle.AlgebraicNotation.name}")
+
+        cfg = Configuration(filepath)
+
+        assert cfg.log_style is LogStyle.AlgebraicNotation
+
+    def test_setting_log_style_persists_to_disk(self, tmp_path):
+        from interface.game import LogStyle
+
+        filepath = tmp_path / ".chessrc"
+        cfg = Configuration(filepath)
+
+        cfg.log_style = LogStyle.AlgebraicNotation
+
+        # Round-trip: a fresh Configuration sees the change.
+        assert Configuration(filepath).log_style is LogStyle.AlgebraicNotation
 
 
 # ---------------------------------------------------------------------------

@@ -2,13 +2,14 @@ from curses import A_BOLD, A_COLOR, wrapper
 from curses import window as Window
 from enum import StrEnum
 from functools import partial
+from pathlib import Path
 from typing import Callable, Optional, cast
 
 from dateutil.parser import parse
 from interface.draw import check_window_maxyx, draw_breadcrumbs
 from interface.game import LogStyle, draw_head, main
 from interface.input import fileprompt
-from interface.menu import Menu
+from interface.menu import Menu, MenuItems
 
 from game import Game, PGNFile
 
@@ -35,7 +36,39 @@ class Label(StrEnum):
 
 
 class Configuration:
-    log_style = LogStyle.CoordinateNotation
+    filepath: Path
+
+    @property
+    def log_style(self) -> LogStyle:
+        return self._log_style
+
+    @log_style.setter
+    def log_style(self, value: LogStyle) -> None:
+        self._log_style = value
+
+        self.save()
+
+    def __init__(self, filepath: Optional[Path] = None) -> None:
+        self.filepath = filepath if filepath is not None else Path.home() / ".chessrc"
+
+        try:
+            with open(self.filepath) as f:
+                for line in f.readlines():
+                    key, value = line.strip().split("=", 1)
+
+                    match key:
+                        case "log_style":
+                            self.log_style = LogStyle[value]
+        except FileNotFoundError:
+            self.log_style = LogStyle.CoordinateNotation
+
+    def save(self) -> None:
+        with open(self.filepath, "w") as f:
+            options = {
+                "log_style": self.log_style.name,
+            }
+
+            f.write("\n".join(f"{k}={v}" for k, v in options.items()))
 
 
 class Chess(object):
@@ -239,16 +272,15 @@ class Chess(object):
             if len(pgn_file) == 0:
                 self.window.addstr(y + 2, x, Label.GamesNotFound, A_COLOR)
             else:
-                Menu(
-                    [
-                        (
-                            f"{parse(cast(str, game.date).replace('.??', ''), fuzzy=True).date()} \"{game.event}\" {game.white} vs. {game.black}",
-                            partial(lambda i: self.play(pgn_file.game(i)), i),
-                        )
-                        for i, game in enumerate(pgn_file)
-                    ],
-                    self.window,
-                ).display()
+                items: MenuItems = [
+                    (
+                        f"{parse(cast(str, game.date).replace('.??', ''), fuzzy=True).date()} \"{game.event}\" {game.white} vs. {game.black}",
+                        partial(lambda i: self.play(pgn_file.game(i)), i),
+                    )
+                    for i, game in enumerate(pgn_file)
+                ]
+
+                Menu(items, self.window).display()
 
             return True
         except FileNotFoundError:
