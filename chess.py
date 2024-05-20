@@ -1,5 +1,6 @@
-from curses import A_BOLD, A_COLOR, A_DIM, wrapper
+from curses import A_BOLD, A_COLOR, wrapper
 from curses import window as Window
+from enum import StrEnum
 from functools import partial
 from typing import Callable, Optional, cast
 
@@ -10,6 +11,27 @@ from interface.input import fileprompt
 from interface.menu import Menu
 
 from game import Game, PGNFile
+
+
+class Label(StrEnum):
+    MakeGame = "new game"
+    SaveGame = "save game"
+    PlayGame = "continue…"
+    LoadFile = "load file"
+    SaveFile = "save file"
+    Options = "options"
+    About = "about"
+    LogStyle = "log style"
+    Reset = "factory reset"
+    PGN = "PGN"
+    JSON = "JSON"
+    CoordinateNotation = "Coordinates"
+    AlgebraicNotation = "Algebraic Notation"
+    FileNotFound = "File not found."
+    GameNotFound = "Game not found."
+    GamesNotFound = "No games found."
+    PressAnyKey = "Press any key to continue…"
+    Error = "Error"
 
 
 class Configuration:
@@ -24,35 +46,36 @@ class Chess(object):
         class Menus:
             root = Menu(
                 [
-                    ("new game", self.play),
-                    ("load file", self.draw_load_menu),
-                    ("options", self.draw_cfg_menu),
-                    ("about", self.draw_about),
+                    (Label.MakeGame, self.play),
+                    (Label.LoadFile, self.draw_load_menu),
+                    (Label.Options, self.draw_cfg_menu),
+                    (Label.About, self.draw_about),
                 ],
                 window,
             )
             load = Menu(
                 [
-                    ("PGN", self.load_pgn),
-                    ("JSON", self.load_json),
+                    (Label.PGN, self.load_pgn),
+                    (Label.JSON, self.load_json),
                 ],
                 window,
-                ("load file",),
+                (Label.LoadFile,),
             )
             save = Menu(
                 [
-                    ("PGN", self.save_pgn),
-                    ("JSON", self.save_json),
+                    (Label.PGN, self.save_pgn),
+                    (Label.JSON, self.save_json),
                 ],
                 window,
-                ("save file",),
+                (Label.SaveFile,),
             )
             cfg = Menu(
                 [
-                    ("log style", self.draw_cfg_log_style_menu),
+                    (Label.LogStyle, self.draw_cfg_log_style_menu),
+                    (Label.Reset, self.reset),
                 ],
                 window,
-                ("options",),
+                (Label.Options,),
             )
 
         self.window = window
@@ -91,12 +114,12 @@ class Chess(object):
                     A_BOLD if self.cfg.log_style == log_style else 0,
                 )
                 for log_style, label in (
-                    (LogStyle.CoordinateNotation, "Coordinates"),
-                    (LogStyle.AlgebraicNotation, "Algebraic Notation"),
+                    (LogStyle.CoordinateNotation, Label.CoordinateNotation),
+                    (LogStyle.AlgebraicNotation, Label.AlgebraicNotation),
                 )
             ],
             self.window,
-            ("options", "log style"),
+            (Label.Options, Label.LogStyle),
         )
 
         menu.position = self.cfg.log_style.value
@@ -111,13 +134,13 @@ class Chess(object):
         self.window.addstr(y + 0, 6, f"© 2021 Brandon Zacharie", A_COLOR)
         self.window.addstr(y + 2, 6, "github: BrandonZacharie/Chess.py", A_COLOR)
         self.window.addstr(y + 3, 6, f"semver: {Game.VERSION}", A_COLOR)
-        self.window.addstr(y + 5, 6, "Press any key to continue...")
+        self.window.addstr(y + 5, 6, Label.PressAnyKey)
         self.window.getch()
 
     def play(self, game: Optional[Game] = None):
         if self.game is None:
-            self.menus.root.insert(0, ("continue…", lambda: self.play(self.game)))
-            self.menus.root.insert(2, ("save file", self.draw_save_menu))
+            self.menus.root.insert(0, (Label.PlayGame, lambda: self.play(self.game)))
+            self.menus.root.insert(2, (Label.SaveGame, self.draw_save_menu))
 
         self.game = Game() if game is None else game
 
@@ -134,7 +157,7 @@ class Chess(object):
 
     def save_pgn(self):
         if self.menus.save.title is not None:
-            draw_breadcrumbs(self.window, (6, 3), *self.menus.save.title, "PGN")
+            draw_breadcrumbs(self.window, (6, 3), *self.menus.save.title, Label.PGN)
 
         self._fileprompt(handler=self._save_pgn)
 
@@ -142,7 +165,7 @@ class Chess(object):
 
     def save_json(self):
         if self.menus.save.title is not None:
-            draw_breadcrumbs(self.window, (6, 3), *self.menus.save.title, "JSON")
+            draw_breadcrumbs(self.window, (6, 3), *self.menus.save.title, Label.JSON)
 
         self._fileprompt(handler=self._save_json)
 
@@ -150,31 +173,41 @@ class Chess(object):
 
     def load_pgn(self):
         if self.menus.load.title is not None:
-            draw_breadcrumbs(self.window, (6, 3), *self.menus.load.title, "PGN")
+            draw_breadcrumbs(self.window, (6, 3), *self.menus.load.title, Label.PGN)
 
         self._fileprompt(handler=self._load_pgn)
 
     def load_json(self):
         if self.menus.load.title is not None:
-            draw_breadcrumbs(self.window, (6, 3), *self.menus.load.title, "JSON")
+            draw_breadcrumbs(self.window, (6, 3), *self.menus.load.title, Label.JSON)
 
         self._fileprompt(handler=self._load_json)
+
+    def reset(self):
+        self.cfg = Configuration()
+        self.game = None
+
+        for index, (label, *_) in enumerate(self.menus.root.items):
+            if label == Label.PlayGame or label == Label.SaveFile:
+                self.menus.root.pop(index)
+
+        raise KeyboardInterrupt
 
     def _save_json(self, filename: str) -> bool:
         x = 5
         y = 6
 
         if self.game is None:
-            self.window.addstr(y + 2, x, "Game not found.", A_COLOR)
+            self.window.addstr(y + 2, x, Label.GameNotFound, A_COLOR)
         else:
             try:
                 self.game.save(filename)
 
                 return True
             except FileNotFoundError:
-                self.window.addstr(y + 2, x, "File not found.", A_COLOR)
+                self.window.addstr(y + 2, x, Label.FileNotFound, A_COLOR)
             except Exception as e:
-                self.window.addstr(y + 2, x, f"Error: {e}", A_COLOR)
+                self.window.addstr(y + 2, x, f"{Label.Error}: {e}", A_COLOR)
 
         return False
 
@@ -183,16 +216,16 @@ class Chess(object):
         y = 6
 
         if self.game is None:
-            self.window.addstr(y + 2, x, "Game not found.", A_COLOR)
+            self.window.addstr(y + 2, x, Label.GameNotFound, A_COLOR)
         else:
             try:
                 self.game.save_pgn(filename)
 
                 return True
             except FileNotFoundError:
-                self.window.addstr(y + 2, x, "File not found.", A_COLOR)
+                self.window.addstr(y + 2, x, Label.FileNotFound, A_COLOR)
             except Exception as e:
-                self.window.addstr(y + 2, x, f"Error: {e}", A_COLOR)
+                self.window.addstr(y + 2, x, f"{Label.Error}: {e}", A_COLOR)
 
         return False
 
@@ -204,7 +237,7 @@ class Chess(object):
             pgn_file = PGNFile(filename)
 
             if len(pgn_file) == 0:
-                self.window.addstr(y + 2, x, "No games found.", A_COLOR)
+                self.window.addstr(y + 2, x, Label.GamesNotFound, A_COLOR)
             else:
                 Menu(
                     [
@@ -219,9 +252,9 @@ class Chess(object):
 
             return True
         except FileNotFoundError:
-            self.window.addstr(y + 2, x, "File not found.", A_COLOR)
+            self.window.addstr(y + 2, x, Label.FileNotFound, A_COLOR)
         except Exception as e:
-            self.window.addstr(y + 2, x, f"Error: {e}", A_COLOR)
+            self.window.addstr(y + 2, x, f"{Label.Error}: {e}", A_COLOR)
 
         return False
 
@@ -237,9 +270,9 @@ class Chess(object):
 
             return True
         except FileNotFoundError:
-            self.window.addstr(y + 2, x, "File not found.", A_COLOR)
+            self.window.addstr(y + 2, x, Label.FileNotFound, A_COLOR)
         except Exception as e:
-            self.window.addstr(y + 2, x, f"Error: {e}", A_COLOR)
+            self.window.addstr(y + 2, x, f"{Label.Error}: {e}", A_COLOR)
 
         return False
 

@@ -47,6 +47,11 @@ class Menu(object):
 
         self._pages = None
 
+    def pop(self, index: int):
+        self.items.pop(index)
+
+        self._pages = None
+
     def navigate(self, n: int) -> None:
         self.position += n
         prev_page = self.page

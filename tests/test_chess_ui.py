@@ -485,9 +485,9 @@ class TestChessPlay:
 
         labels = [item[0] for item in chess_instance.menus.root.items]
         assert labels[0] == "continue…"
-        assert "save file" in labels
-        # "save file" should land at index 2 (after continue + new game).
-        assert labels.index("save file") == 2
+        assert "save game" in labels
+        # "save game" should land at index 2 (after continue + new game).
+        assert labels.index("save game") == 2
 
     def test_second_play_does_not_duplicate_entries(self, chess_instance):
         chess_instance.play()
@@ -498,7 +498,7 @@ class TestChessPlay:
 
         assert second_labels == first_labels
         assert second_labels.count("continue…") == 1
-        assert second_labels.count("save file") == 1
+        assert second_labels.count("save game") == 1
 
     def test_play_invokes_main_with_game_and_log_style(self, chess_instance):
         chess_instance.play()
@@ -718,7 +718,7 @@ class TestChessDrawMenus:
         assert "Brandon Zacharie" in rendered
         assert "github" in rendered
         assert "semver" in rendered
-        assert "Press any key to continue..." in rendered
+        assert "Press any key to continue…" in rendered
 
 
 # ---------------------------------------------------------------------------
