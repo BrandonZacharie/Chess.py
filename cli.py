@@ -1,22 +1,13 @@
 from curses import A_BOLD, A_UNDERLINE, curs_set, wrapper
 from curses.ascii import ESC
+from curses import window as Window
 from enum import IntEnum
 from itertools import zip_longest
-from typing import TYPE_CHECKING, List, Optional, Tuple, cast
+from typing import List, Optional, Tuple, cast
 
 from game import PIECE_NAME_TYPE_MAP, Board, Game, Team
 from game.board import LogEvent, LogMove
 from game.error import IllegalMoveError
-
-if TYPE_CHECKING:
-    from _curses import _CursesWindow
-
-    CursesWindow = _CursesWindow
-else:
-    from typing import Any
-
-    CursesWindow = Any
-
 
 BOARD_CELL_ORDS = [ord(ch) for ch in "12345678ABCDEFGHabcdefgh"]
 
@@ -33,11 +24,11 @@ class InputMode(IntEnum):
     SELECT_PROM = 3
 
 
-def draw_head(window: CursesWindow):
+def draw_head(window: Window):
     window.addstr(2, 5, " Chess.py ", A_BOLD | A_UNDERLINE)
 
 
-def draw_board(window: CursesWindow, board: Board, log_style: LogStyle):
+def draw_board(window: Window, board: Board, log_style: LogStyle):
     x = 5
     y = 7
 
@@ -71,7 +62,7 @@ def draw_board(window: CursesWindow, board: Board, log_style: LogStyle):
             draw_elog(window, board)
 
 
-def draw_ilog(window: CursesWindow, board: Board):
+def draw_ilog(window: Window, board: Board):
     def get_cell_name(indices: Tuple[int, int]) -> str:
         return board[indices[1]][indices[0]].name
 
@@ -135,7 +126,7 @@ def draw_ilog(window: CursesWindow, board: Board):
     window.addstr(y + length_max, x + output_max + 1, "⌟")
 
 
-def draw_elog(window: CursesWindow, board: Board):
+def draw_elog(window: Window, board: Board):
     lines = 0
     x = 43
     y = 5
@@ -172,7 +163,7 @@ def draw_elog(window: CursesWindow, board: Board):
     window.addstr(y + length_max, x + output_max + 1, "⌟")
 
 
-def draw_notes(window: CursesWindow, game: Game, mode: InputMode):
+def draw_notes(window: Window, game: Game, mode: InputMode):
     x = 6
     y = 31
     lead = "It is "
@@ -187,7 +178,7 @@ def draw_notes(window: CursesWindow, game: Game, mode: InputMode):
     window.addstr(y, x + len(lead) + len(turn.name), tail)
 
 
-def draw_input_prompt(window: CursesWindow, mode: InputMode):
+def draw_input_prompt(window: Window, mode: InputMode):
     x = 6
     y = 32
 
@@ -202,7 +193,7 @@ def draw_input_prompt(window: CursesWindow, mode: InputMode):
     window.clrtoeol()
 
 
-def draw_input_err(window: CursesWindow, e: Exception | str):
+def draw_input_err(window: Window, e: Exception | str):
     x = 6
     y = 32
 
@@ -212,7 +203,7 @@ def draw_input_err(window: CursesWindow, e: Exception | str):
     window.getkey()
 
 
-def draw_input_cursor(window: CursesWindow, mode: InputMode, s: Optional[str] = None):
+def draw_input_cursor(window: Window, mode: InputMode, s: Optional[str] = None):
     y = 33
     x = 6
 
@@ -231,14 +222,14 @@ def draw_input_cursor(window: CursesWindow, mode: InputMode, s: Optional[str] = 
     window.clrtoeol()
 
 
-def draw_input(window: CursesWindow, mode: InputMode, ch: int):
+def draw_input(window: Window, mode: InputMode, ch: int):
     y = 33
     x = 6 if mode is InputMode.SELECT_CELL else 9
 
     window.addstr(y, x, f"{chr(ch)}".upper())
 
 
-def get_input(window: CursesWindow, mode: InputMode) -> List[int]:
+def get_input(window: Window, mode: InputMode) -> List[int]:
     count: int
     input: List[int] = []
 
@@ -268,7 +259,7 @@ def get_input(window: CursesWindow, mode: InputMode) -> List[int]:
 
 
 def main(
-    window: CursesWindow,
+    window: Window,
     game: Game = Game(),
     log_style: LogStyle = LogStyle.CoordinateNotation,
 ):

@@ -23,32 +23,24 @@ from curses import (
     wrapper,
 )
 from curses.ascii import BS, DEL, ENQ, ESC, LF, SOH, VT
+from curses import window as Window
 from enum import IntEnum
 from functools import partial
 from math import floor
 from os import getcwd, path
-from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, TypeAlias, cast
+from typing import Callable, List, Optional, Tuple, TypeAlias, cast
 
 from cli import LogStyle, draw_head, main
 from dateutil.parser import parse
 
 from game import Game, PGNFile
 
-if TYPE_CHECKING:
-    from _curses import _CursesWindow
-
-    CursesWindow = _CursesWindow
-else:
-    from typing import Any
-
-    CursesWindow = Any
-
 MenuItems: TypeAlias = List[
     Tuple[str, Optional[Callable]] | Tuple[str, Optional[Callable], int]
 ]
 
 
-def check_window_maxyx(window: CursesWindow, maxyx: Tuple[int, int] = (40, 40)) -> bool:
+def check_window_maxyx(window: Window, maxyx: Tuple[int, int] = (40, 40)) -> bool:
     attempts = 0
 
     while True:
@@ -101,7 +93,7 @@ class Menu(object):
     def __init__(
         self,
         items: MenuItems,
-        window: CursesWindow,
+        window: Window,
         title: Optional[str] = None,
     ):
         self._pages: Optional[List[MenuItems]] = None
@@ -232,7 +224,7 @@ class Configuration:
 
 
 class Chess(object):
-    def __init__(self, window: CursesWindow):
+    def __init__(self, window: Window):
         check_window_maxyx(window)
         draw_head(window)
 
