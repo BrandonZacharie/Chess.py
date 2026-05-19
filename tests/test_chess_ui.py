@@ -307,13 +307,15 @@ class TestConfiguration:
 
 
 class _BareChess:
-    """An almost-Chess used to drive _fileprompt without running __init__.
+    """An almost-Chess used to drive methods that only need ``self.window``.
 
-    __init__ wires up Menu(...) calls (which need a window subwin) and
-    enters the root menu loop. For _fileprompt we only need ``self.window``.
+    The real ``Chess.__init__`` wires up Menu(...) instances and enters the
+    root menu loop. For ``_fileprompt`` and ``_load_pgn`` we only need a
+    window, so we lift the methods onto a lightweight stand-in.
     """
 
     _fileprompt = Chess._fileprompt
+    _load_pgn = Chess._load_pgn
 
     def __init__(self, window):
         self.window = window
@@ -432,3 +434,137 @@ class TestFilePrompt:
         assert received[0].endswith("ab"), (
             f"unhandled special key leaked into the path: {received[0]!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Chess.__init__ end-to-end
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def chess_instance(curses_patches):
+    """A fully-constructed Chess whose root menu was dismissed via ESC.
+
+    ``cli.main`` is patched out for the lifetime of the test so
+    ``Chess.play`` doesn't try to drive the (mocked) game loop.
+    """
+    window = make_window(getch_keys=[int(KeyCode.ESC)])
+    with patch.object(chess_mod, "main") as main_mock:
+        instance = Chess(window)
+        instance._main_mock = main_mock  # exposed for assertions
+        yield instance
+
+
+class TestChessInit:
+    def test_root_menu_has_the_expected_entries(self, chess_instance):
+        labels = [item[0] for item in chess_instance.menus.root.items]
+        # Order matters: insertions in ``play`` rely on it.
+        assert labels == [
+            "new game",
+            "load file",
+            "options",
+            "about",
+            "exit",
+        ]
+
+    def test_sub_menus_are_constructed(self, chess_instance):
+        assert chess_instance.menus.load is not None
+        assert chess_instance.menus.save is not None
+        assert chess_instance.menus.cfg is not None
+        # Sub-menus also receive an appended "exit".
+        for menu in (
+            chess_instance.menus.load,
+            chess_instance.menus.save,
+            chess_instance.menus.cfg,
+        ):
+            assert menu.items[-1] == ("exit", None)
+
+    def test_no_game_is_active_after_construction(self, chess_instance):
+        assert chess_instance.game is None
+
+    def test_main_is_not_called_when_user_exits_root_menu(self, chess_instance):
+        chess_instance._main_mock.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Chess.play
+# ---------------------------------------------------------------------------
+
+
+class TestChessPlay:
+    def test_first_play_inserts_continue_and_save_entries(self, chess_instance):
+        chess_instance.play()
+
+        labels = [item[0] for item in chess_instance.menus.root.items]
+        assert labels[0] == "continue…"
+        assert "save file" in labels
+        # "save file" should land at index 2 (after continue + new game).
+        assert labels.index("save file") == 2
+
+    def test_second_play_does_not_duplicate_entries(self, chess_instance):
+        chess_instance.play()
+        first_labels = [item[0] for item in chess_instance.menus.root.items]
+
+        chess_instance.play()
+        second_labels = [item[0] for item in chess_instance.menus.root.items]
+
+        assert second_labels == first_labels
+        assert second_labels.count("continue…") == 1
+        assert second_labels.count("save file") == 1
+
+    def test_play_invokes_main_with_game_and_log_style(self, chess_instance):
+        chess_instance.play()
+
+        chess_instance._main_mock.assert_called_once()
+        args, _ = chess_instance._main_mock.call_args
+        assert args[0] is chess_instance.window
+        assert args[1] is chess_instance.game
+        assert args[2] == chess_instance.cfg.log_style
+
+    def test_play_resets_root_menu_position(self, chess_instance):
+        chess_instance.menus.root.position = 3
+        chess_instance.play()
+        assert chess_instance.menus.root.position == 0
+
+
+# ---------------------------------------------------------------------------
+# Chess._load_pgn against real fixtures
+# ---------------------------------------------------------------------------
+
+
+PGN_DIR = Path(__file__).resolve().parent
+
+
+class TestLoadPgn:
+    @pytest.fixture
+    def bare(self, curses_patches):
+        return _BareChess(make_window(getch_keys=[int(KeyCode.ESC)]))
+
+    def test_missing_file_returns_false_and_reports_the_error(self, bare):
+        ok = bare._load_pgn("does-not-exist.pgn")
+        assert ok is False
+        # An error message must have been drawn somewhere on the window.
+        # addstr is called as addstr(y, x, message[, attr]); pull only the
+        # string positional args out of the call list.
+        rendered = " ".join(
+            arg
+            for call in bare.window.addstr.call_args_list
+            for arg in call.args
+            if isinstance(arg, str)
+        ).lower()
+        assert "not found" in rendered or "error" in rendered
+
+    def test_loads_simple_pgn_and_renders_a_menu(self, bare, curses_patches):
+        # The PGNFile loader joins with ``game/`` so we pass an absolute path
+        # to side-step that resolution.
+        ok = bare._load_pgn(str(PGN_DIR / "test1.pgn"))
+
+        # The constructed sub-menu exits immediately on the queued ESC, so
+        # _load_pgn returns True for a successful load.
+        assert ok is True
+
+    def test_loads_pgn_with_partial_dates(self, bare, curses_patches):
+        # test2.pgn uses "1886.??.??" — exercises the ``.replace('.??', '')``
+        # / ``fuzzy=True`` branch in the menu-label formatter.
+        ok = bare._load_pgn(str(PGN_DIR / "test2.pgn"))
+        assert ok is True
