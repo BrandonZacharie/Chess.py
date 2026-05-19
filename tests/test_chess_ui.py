@@ -249,13 +249,6 @@ class TestMenuDisplay:
 
         menu.display()  # KeyboardInterrupt is swallowed
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: panel.hide() lives inside the display loop, so after the "
-        "first non-exit keypress the panel is removed from the deck and "
-        "subsequent iterations leave it hidden. The hide call should only "
-        "happen once, when display() exits.",
-    )
     def test_panel_is_not_hidden_between_keypresses(self, curses_patches):
         window = make_window(
             getch_keys=[
@@ -269,11 +262,15 @@ class TestMenuDisplay:
             [("one", lambda: None), ("two", lambda: None), ("three", lambda: None)],
             window,
         )
+        # Menu.__init__ hides the panel once on construction; we only care
+        # about hide() calls during display().
+        menu.panel.hide.reset_mock()
+
         menu.display()
 
-        assert menu.panel.hide.call_count <= 1, (
-            f"panel.hide() was called {menu.panel.hide.call_count} times; "
-            "it should only run once on display() exit."
+        assert menu.panel.hide.call_count == 1, (
+            f"panel.hide() was called {menu.panel.hide.call_count} times "
+            "during display(); it should only run once on exit."
         )
 
 

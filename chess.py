@@ -212,11 +212,12 @@ class Menu(object):
                         break
 
                 self.window.clear()
-                self.panel.hide()
-                panel.update_panels()
-                doupdate()
         except KeyboardInterrupt:
             pass
+
+        self.panel.hide()
+        panel.update_panels()
+        doupdate()
 
 
 class Configuration:
