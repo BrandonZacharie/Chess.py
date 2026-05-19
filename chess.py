@@ -102,7 +102,7 @@ class Menu(object):
         self.position = 0
         self.page = 0
         self.page_size = 25
-        self.items = items
+        self.items = list(items)
         self.panel = panel.new_panel(self.window)
 
         self.items.append(("exit", None))

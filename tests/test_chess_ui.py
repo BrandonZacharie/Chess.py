@@ -129,11 +129,6 @@ class TestMenuPagination:
         assert second[0][0][0] == "inserted"
         assert len(second[0]) == 5
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: Menu.__init__ appends 'exit' to the caller's list, so "
-        "passing the same list twice yields two 'exit' entries.",
-    )
     def test_shared_items_list_is_not_mutated(self, curses_patches):
         window = make_window()
         items: List = [("one", lambda: None)]
