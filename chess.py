@@ -142,7 +142,7 @@ class Menu(object):
 
         if self.position >= prev_page_size:
             self.page = min(
-                len(self.items) // self.page_size,
+                len(self.pages) - 1,
                 self.page + floor(self.position / self.page_size),
             )
             next_page_size = len(self.pages[self.page])

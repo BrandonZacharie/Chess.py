@@ -190,12 +190,6 @@ class TestMenuNavigate:
         assert 0 <= menu.page < len(menu.pages)
         assert 0 <= menu.position < len(menu.pages[menu.page])
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: when len(items) is an exact multiple of page_size, "
-        "navigate forward off the end sets self.page to len(items)//page_size, "
-        "which is out of bounds (should be len(pages)-1).",
-    )
     def test_forward_navigation_when_items_align_with_page_size(self, curses_patches):
         # 49 user items + appended exit = 50 = 2 * page_size, so
         # len(pages) == 2 (valid indices 0,1) but the clamp in navigate()
