@@ -51,9 +51,11 @@ def make_window(getch_keys: Iterable[int] = ()) -> MagicMock:
 @pytest.fixture
 def curses_patches():
     """Patch module-level curses helpers used by chess.py."""
-    with patch.object(chess_mod, "panel") as panel_mock, patch.object(
-        chess_mod, "doupdate"
-    ) as doupdate_mock, patch.object(chess_mod, "curs_set") as curs_set_mock:
+    with (
+        patch.object(chess_mod, "panel") as panel_mock,
+        patch.object(chess_mod, "doupdate") as doupdate_mock,
+        patch.object(chess_mod, "curs_set") as curs_set_mock,
+    ):
         panel_mock.new_panel.side_effect = lambda *_a, **_kw: MagicMock(name="panel")
         yield {
             "panel": panel_mock,
@@ -202,9 +204,9 @@ class TestMenuNavigate:
         menu.position = 24  # last entry of the last page
         menu.navigate(1)  # navigate past the end
 
-        assert menu.page < len(menu.pages), (
-            f"page={menu.page} is out of range for {len(menu.pages)} pages"
-        )
+        assert menu.page < len(
+            menu.pages
+        ), f"page={menu.page} is out of range for {len(menu.pages)} pages"
         # And the next render must not crash on pages[self.page].
         _ = menu.pages[menu.page]
 
@@ -223,17 +225,13 @@ class TestMenuDisplay:
 
     def test_enter_on_exit_item_breaks_the_loop(self, curses_patches):
         # First press DOWN to land on the exit item, then ENTER.
-        window = make_window(
-            getch_keys=[int(KeyCode.DOWN), int(KeyCode.ENTER)]
-        )
+        window = make_window(getch_keys=[int(KeyCode.DOWN), int(KeyCode.ENTER)])
         menu = Menu([("one", lambda: None)], window)
         menu.display()
 
     def test_enter_invokes_selected_callback(self, curses_patches):
         called = []
-        window = make_window(
-            getch_keys=[int(KeyCode.ENTER), int(KeyCode.ESC)]
-        )
+        window = make_window(getch_keys=[int(KeyCode.ENTER), int(KeyCode.ESC)])
         menu = Menu([("one", lambda: called.append(1))], window)
 
         menu.display()
@@ -410,9 +408,9 @@ class TestFilePrompt:
         window = make_window(getch_keys=keys)
         _BareChess(window)._fileprompt(handler=handler)
 
-        assert received[0].endswith("ab"), (
-            f"unhandled special key leaked into the path: {received[0]!r}"
-        )
+        assert received[0].endswith(
+            "ab"
+        ), f"unhandled special key leaked into the path: {received[0]!r}"
 
 
 # ---------------------------------------------------------------------------
