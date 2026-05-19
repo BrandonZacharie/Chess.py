@@ -399,13 +399,6 @@ class TestFilePrompt:
 
         assert received[0].endswith("aXb")
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: _fileprompt's default branch accepts any keycode and "
-        "calls chr(key), so curses special keys (F1, KEY_RESIZE, etc.) get "
-        "inserted as garbage characters or raise ValueError for "
-        "out-of-range codepoints.",
-    )
     def test_unhandled_special_keys_are_ignored(self, curses_patches):
         from curses import KEY_F1
 

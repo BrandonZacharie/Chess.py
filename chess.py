@@ -479,11 +479,13 @@ class Chess(object):
 
                         self.window.addstr(y, x, prompt)
                         self.window.clrtoeol()
-                case key:
+                case key if 0 <= key < 0x100:
                     prompt = prompt[: cursor - 1] + chr(key) + prompt[cursor - 1 :]
                     cursor += 1
 
                     self.window.addstr(y, x, prompt)
+                case _:
+                    pass
 
             self.window.move(y, cursor + x)
 
