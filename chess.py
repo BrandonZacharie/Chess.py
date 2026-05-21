@@ -102,7 +102,7 @@ class Menu(object):
         self.position = 0
         self.page = 0
         self.page_size = 25
-        self.items = items
+        self.items = list(items)
         self.panel = panel.new_panel(self.window)
 
         self.items.append(("exit", None))
@@ -142,7 +142,7 @@ class Menu(object):
 
         if self.position >= prev_page_size:
             self.page = min(
-                len(self.items) // self.page_size,
+                len(self.pages) - 1,
                 self.page + floor(self.position / self.page_size),
             )
             next_page_size = len(self.pages[self.page])
@@ -212,11 +212,12 @@ class Menu(object):
                         break
 
                 self.window.clear()
-                self.panel.hide()
-                panel.update_panels()
-                doupdate()
         except KeyboardInterrupt:
             pass
+
+        self.panel.hide()
+        panel.update_panels()
+        doupdate()
 
 
 class Configuration:
@@ -479,11 +480,13 @@ class Chess(object):
 
                         self.window.addstr(y, x, prompt)
                         self.window.clrtoeol()
-                case key:
+                case key if 0 <= key < 0x100:
                     prompt = prompt[: cursor - 1] + chr(key) + prompt[cursor - 1 :]
                     cursor += 1
 
                     self.window.addstr(y, x, prompt)
+                case _:
+                    pass
 
             self.window.move(y, cursor + x)
 
