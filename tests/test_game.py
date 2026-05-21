@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from tempfile import NamedTemporaryFile
 from typing import Any, Callable, Generator, List, Optional, Sequence, Tuple, Type
 
-from pytest import mark, raises
+from pytest import mark, param, raises
 
 from game import (
     PIECE_NAME_TYPE_MAP,
@@ -221,8 +221,8 @@ def test_load_json_unsupported_version():
     [
         "../tests/test1.pgn",
         "../tests/test2.pgn",
-        "../tests/Carlsen.pgn",
-        "../tests/Nakamura.pgn",
+        param("../tests/Carlsen.pgn", marks=mark.slow),
+        param("../tests/Nakamura.pgn", marks=mark.slow),
     ],
 )
 def test_load_pgn_file(filename: str):

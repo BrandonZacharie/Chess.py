@@ -39,7 +39,7 @@ jobs:
         pip install coveralls
     - name: Test
       run: |
-        coverage run -m pytest -xsvv
+        coverage run -m pytest -xsvv --override-ini='addopts='
     - name: Coveralls
       uses: AndreMiras/coveralls-python-action@develop
       with:

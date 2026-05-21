@@ -23,6 +23,12 @@ else \
 	) \
 fi
 
+test-all: clean_coverage
+	( \
+		source .venv/bin/activate; \
+		coverage run -m pytest -xsvv --override-ini='addopts='; \
+	)
+
 report: test
 	coverage html && open htmlcov/index.html
 
