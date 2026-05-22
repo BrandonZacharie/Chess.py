@@ -21,3 +21,9 @@ exclude_lines = [
 
 [tool.coverage.run]
 relative_files = true
+
+[tool.pytest.ini_options]
+markers = [
+  "slow: parses large PGN fixtures; minutes per test. Skipped by default; run `make test-all` or pass `--override-ini='addopts='` to include them.",
+]
+addopts = "-m 'not slow'"
