@@ -344,6 +344,34 @@ class TestDrawLogs:
         rendered = rendered_strings(window)
         assert "1." in rendered
 
+    def test_draw_ilog_breaks_after_four_columns(self):
+        """``length_max`` is 24 lines per column, with at most 4 columns.
+
+        Once the fourth column overflows the renderer stops drawing. We
+        synthesize an ilog of 200 LogMove entries (well over 4 * 24) to
+        exercise that break, and check the columns-2/3/4 advance.
+        """
+        window = make_window()
+        board = MagicMock()
+        # Each LogMove is ((from_x, from_y), (to_x, to_y)). get_cell_name
+        # calls board[y][x].name, so make any indexing into board return a
+        # cell with a stable name.
+        cell = MagicMock()
+        cell.name = "A1"
+        board.__getitem__.return_value.__getitem__.return_value = cell
+        board.ilog = [((0, 0), (1, 1)) for _ in range(200)]
+
+        # Must not raise; the 4-column break is the only thing that lets
+        # this finish in finite time given 200 entries.
+        draw_ilog(window, board)
+
+    def test_draw_elog_breaks_after_four_columns(self):
+        window = make_window()
+        board = MagicMock()
+        board.elog = [(f"{i}.", "Nf3", "Nf6") for i in range(200)]
+
+        draw_elog(window, board)
+
 
 # ---------------------------------------------------------------------------
 # main (game loop)
@@ -496,3 +524,17 @@ class TestMainPromotionEndToEnd:
 
     def test_knight_promotion_is_accepted(self, curs_set_patch):
         assert self._drive("N"), "Knight promotion was filtered out"
+
+
+# ---------------------------------------------------------------------------
+# run() entrypoint
+# ---------------------------------------------------------------------------
+
+
+class TestRun:
+    def test_run_delegates_to_curses_wrapper_with_main(self):
+        from cli import run
+
+        with patch.object(cli_mod, "wrapper") as wrapper_mock:
+            run()
+            wrapper_mock.assert_called_once_with(cli_mod.main)

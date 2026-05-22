@@ -461,6 +461,56 @@ def test_invalid_pgn_move():
         game.parse_pgn_move("a5")
 
 
+def test_parse_pgn_move_queenside_castle():
+    """Both colors' O-O-O parse paths — covers the white-team branch."""
+    game = Game()
+    # Default turn is WHITE.
+    assert game.parse_pgn_move("O-O-O") == ("E1", "C1", None)
+    # Flip the turn and re-check the black branch (already covered, but
+    # keeps the symmetry assertion visible).
+    game._last_turn = Turn.WHITE
+    assert game.parse_pgn_move("O-O-O") == ("E8", "C8", None)
+
+
+def test_parse_pgn_move_with_promotion_annotation():
+    """Algebraic notation with '=Q' / '=R' strips the suffix and records
+    the promotion piece for later."""
+    game = Game()
+    game.move("E2", "E4")
+    game.move("D7", "D5")
+    game.move("E4", "D5")
+    game.move("E7", "E6")
+    game.move("D5", "E6")
+    game.move("F8", "C5")
+    game.move("E6", "F7")
+    game.move("E8", "F8")
+    # The promoting capture in algebraic notation:
+    result = game.parse_pgn_move("fxg8=Q+")
+    assert result is not None
+    q1, q2, promo = result
+    assert promo == "Q"
+
+
+def test_pgn_file_replays_a_promotion(tmp_path):
+    """Drives PGNFile.game() through a small PGN that ends in a queen
+    promotion, covering the engine's automatic promote() callback."""
+    pgn = tmp_path / "promotion.pgn"
+    pgn.write_text(
+        '[Event "Promotion test"]\n'
+        '[Date "2024.01.01"]\n'
+        '[Result "1-0"]\n'
+        "\n"
+        "1. e4 d5 2. exd5 e6 3. dxe6 Bc5 4. exf7+ Kf8 5. fxg8=Q 1-0\n"
+    )
+
+    pgn_file = PGNFile(str(pgn))
+    assert len(pgn_file) == 1
+    game = pgn_file.game(0)
+    # After all moves replay, g8 must hold a Queen — proving the auto
+    # promote() call fired.
+    assert game.cell("G8").piece.name == "Queen"
+
+
 def test_illegal_move_through_check():
     game = Game()
 
