@@ -240,25 +240,23 @@ class TestGetInput:
         result = get_input(window, InputMode.SELECT_DEST)
         assert result == [ord("a"), ord("4")]
 
-    def test_select_prom_collects_one_board_char(self):
-        # Only 'B' currently survives get_input's BOARD_CELL_ORDS filter
-        # in SELECT_PROM mode — see the xfail below for the wider story.
+    def test_select_prom_collects_one_promotion_letter(self):
         window = make_window(getch_keys=[ord("B")])
         result = get_input(window, InputMode.SELECT_PROM)
         assert result == [ord("B")]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: get_input filters every keystroke through "
-        "BOARD_CELL_ORDS (digits 1-8 and letters A-H). In SELECT_PROM "
-        "mode that silently drops Q, R, N and K, so players cannot "
-        "promote to anything other than Bishop.",
-    )
-    def test_select_prom_accepts_queen_rook_knight(self):
-        for key in (ord("Q"), ord("R"), ord("N")):
+    def test_select_prom_accepts_all_four_promotion_letters(self):
+        for key in (ord("Q"), ord("R"), ord("N"), ord("B")):
             window = make_window(getch_keys=[key])
             result = get_input(window, InputMode.SELECT_PROM)
             assert result == [key], f"SELECT_PROM dropped {chr(key)!r}"
+
+    def test_select_prom_rejects_board_cell_letters(self):
+        # In SELECT_PROM mode, board cell letters (A-H, 1-8) are NOT valid
+        # promotion choices and must be filtered. 'B' is the one overlap.
+        window = make_window(getch_keys=[ord("A"), ord("5"), ord("Q")])
+        result = get_input(window, InputMode.SELECT_PROM)
+        assert result == [ord("Q")]
 
     def test_non_board_chars_are_ignored(self):
         # The 'z' (not a board cell) should be discarded; loop keeps reading.
@@ -490,26 +488,11 @@ class TestMainPromotionEndToEnd:
     def test_bishop_promotion_is_accepted(self, curs_set_patch):
         assert self._drive("B"), "Bishop promotion failed unexpectedly"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: get_input's BOARD_CELL_ORDS filter drops 'Q' in "
-        "SELECT_PROM mode. Players cannot promote to Queen.",
-    )
     def test_queen_promotion_is_accepted(self, curs_set_patch):
         assert self._drive("Q"), "Queen promotion was filtered out"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: get_input's BOARD_CELL_ORDS filter drops 'R' in "
-        "SELECT_PROM mode. Players cannot promote to Rook.",
-    )
     def test_rook_promotion_is_accepted(self, curs_set_patch):
         assert self._drive("R"), "Rook promotion was filtered out"
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BUG: get_input's BOARD_CELL_ORDS filter drops 'N' in "
-        "SELECT_PROM mode. Players cannot promote to Knight.",
-    )
     def test_knight_promotion_is_accepted(self, curs_set_patch):
         assert self._drive("N"), "Knight promotion was filtered out"

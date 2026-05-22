@@ -10,6 +10,7 @@ from game.board import LogEvent, LogMove
 from game.error import IllegalMoveError
 
 BOARD_CELL_ORDS = [ord(ch) for ch in "12345678ABCDEFGHabcdefgh"]
+PROMOTION_PIECE_ORDS = [ord(ch) for ch in "QqRrBbNn"]
 
 
 class LogStyle(IntEnum):
@@ -241,13 +242,15 @@ def get_input(window: Window, mode: InputMode) -> List[int]:
         case InputMode.SELECT_PROM:
             count = 1
 
+    allowed = PROMOTION_PIECE_ORDS if mode is InputMode.SELECT_PROM else BOARD_CELL_ORDS
+
     while count > 0:
         ch = window.getch()
 
         if ch == ESC:
             raise KeyboardInterrupt
 
-        if ch not in BOARD_CELL_ORDS:
+        if ch not in allowed:
             continue
 
         draw_input(window, mode, ch)
