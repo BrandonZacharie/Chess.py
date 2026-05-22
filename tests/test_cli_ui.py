@@ -433,3 +433,83 @@ class TestMainLoop:
         # ValueError branch (the IllegalMoveError branch passes the
         # exception instance instead).
         assert any(call.args[1] == "Invalid input." for call in err_mock.call_args_list)
+
+
+# ---------------------------------------------------------------------------
+# End-to-end promotion behavior
+# ---------------------------------------------------------------------------
+
+
+def _game_one_move_from_promotion() -> Game:
+    """Real Game positioned so that white's next move (F7->G8) promotes.
+
+    Setup is a known short promotion line:
+      1. e4 d5 2. exd5 e6 3. dxe6 Bc5 4. exf7+ Kf8
+    Now white's f-pawn on f7 can capture g8 and promote.
+    """
+    g = Game()
+    for q1, q2 in [
+        ("E2", "E4"),
+        ("D7", "D5"),
+        ("E4", "D5"),
+        ("E7", "E6"),
+        ("D5", "E6"),
+        ("F8", "C5"),
+        ("E6", "F7"),
+        ("E8", "F8"),
+    ]:
+        g.move(q1, q2)
+    return g
+
+
+class TestMainPromotionEndToEnd:
+    """Drive ``main`` all the way through a real promotion attempt.
+
+    Each parametrization plays the same 5-move promoting capture and
+    presses one of the standard promotion letters. The test asserts the
+    pawn is no longer promotable afterward (i.e. the engine accepted
+    the promotion). The current ``get_input`` filter only lets 'B'
+    through; 'Q' / 'R' / 'N' are xfail(strict) until that's fixed.
+    """
+
+    def _drive(self, piece_letter: str) -> bool:
+        game = _game_one_move_from_promotion()
+        keys = [
+            ord("F"),
+            ord("7"),
+            ord("G"),
+            ord("8"),
+            ord(piece_letter),
+            _esc(),
+        ]
+        window = make_window(getch_keys=keys)
+        with patch.object(cli_mod, "curs_set"), patch.object(cli_mod, "draw_input_err"):
+            main(window, game, LogStyle.CoordinateNotation)
+        return game.board.get_promotable() is None
+
+    def test_bishop_promotion_is_accepted(self, curs_set_patch):
+        assert self._drive("B"), "Bishop promotion failed unexpectedly"
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="BUG: get_input's BOARD_CELL_ORDS filter drops 'Q' in "
+        "SELECT_PROM mode. Players cannot promote to Queen.",
+    )
+    def test_queen_promotion_is_accepted(self, curs_set_patch):
+        assert self._drive("Q"), "Queen promotion was filtered out"
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="BUG: get_input's BOARD_CELL_ORDS filter drops 'R' in "
+        "SELECT_PROM mode. Players cannot promote to Rook.",
+    )
+    def test_rook_promotion_is_accepted(self, curs_set_patch):
+        assert self._drive("R"), "Rook promotion was filtered out"
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="BUG: get_input's BOARD_CELL_ORDS filter drops 'N' in "
+        "SELECT_PROM mode. Players cannot promote to Knight.",
+    )
+    def test_knight_promotion_is_accepted(self, curs_set_patch):
+        assert self._drive("N"), "Knight promotion was filtered out"
