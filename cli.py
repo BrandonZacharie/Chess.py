@@ -263,9 +263,12 @@ def get_input(window: Window, mode: InputMode) -> List[int]:
 
 def main(
     window: Window,
-    game: Game = Game(),
+    game: Optional[Game] = None,
     log_style: LogStyle = LogStyle.CoordinateNotation,
 ):
+    if game is None:
+        game = Game()
+
     mode = InputMode.SELECT_CELL
     q1 = ""
     q2 = ""

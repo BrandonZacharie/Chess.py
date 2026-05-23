@@ -395,6 +395,42 @@ class TestMainLoop:
         # No move was performed.
         assert game.turn is Team.WHITE.value or game.turn.name == "WHITE"
 
+    def test_each_call_without_game_uses_a_fresh_game(self, curs_set_patch):
+        """Regression test for the mutable-default-argument footgun.
+
+        Previously `def main(window, game: Game = Game(), ...)` shared a
+        single Game across every caller that omitted the argument, so a
+        move made in one call would leak into the next. The default is
+        now None; each call constructs its own Game.
+        """
+        window1 = make_window(
+            getch_keys=[ord("A"), ord("2"), ord("A"), ord("4"), _esc()]
+        )
+        main(window1, log_style=LogStyle.CoordinateNotation)
+
+        # If the default were a shared Game, the second call would start
+        # with white's a-pawn already moved and turn flipped to black.
+        # Drive the same opening move from a fresh game; the engine
+        # should accept it (it wouldn't if state had leaked over).
+        window2 = make_window(
+            getch_keys=[ord("A"), ord("2"), ord("A"), ord("4"), _esc()]
+        )
+        with patch.object(cli_mod, "draw_input_err") as err_mock:
+            main(window2, log_style=LogStyle.CoordinateNotation)
+
+        # No "Invalid input" / illegal-move error fired on the second
+        # call → state did not leak from the first.
+        err_mock.assert_not_called()
+
+    def test_signature_default_is_none(self):
+        """Structural guard: ensure the default isn't a Game instance
+        again. A future refactor that re-introduces `Game()` as the
+        default would silently re-bring the bug."""
+        from inspect import signature
+
+        params = signature(main).parameters
+        assert params["game"].default is None
+
     def test_completes_one_move_then_exits(self, curs_set_patch):
         # White pushes the a-pawn two squares: A2 -> A4. Then ESC.
         window = make_window(
