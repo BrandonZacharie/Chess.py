@@ -344,6 +344,34 @@ class TestDrawLogs:
         rendered = rendered_strings(window)
         assert "1." in rendered
 
+    def test_draw_ilog_breaks_after_four_columns(self):
+        """``length_max`` is 24 lines per column, with at most 4 columns.
+
+        Once the fourth column overflows the renderer stops drawing. We
+        synthesize an ilog of 200 LogMove entries (well over 4 * 24) to
+        exercise that break, and check the columns-2/3/4 advance.
+        """
+        window = make_window()
+        board = MagicMock()
+        # Each LogMove is ((from_x, from_y), (to_x, to_y)). get_cell_name
+        # calls board[y][x].name, so make any indexing into board return a
+        # cell with a stable name.
+        cell = MagicMock()
+        cell.name = "A1"
+        board.__getitem__.return_value.__getitem__.return_value = cell
+        board.ilog = [((0, 0), (1, 1)) for _ in range(200)]
+
+        # Must not raise; the 4-column break is the only thing that lets
+        # this finish in finite time given 200 entries.
+        draw_ilog(window, board)
+
+    def test_draw_elog_breaks_after_four_columns(self):
+        window = make_window()
+        board = MagicMock()
+        board.elog = [(f"{i}.", "Nf3", "Nf6") for i in range(200)]
+
+        draw_elog(window, board)
+
 
 # ---------------------------------------------------------------------------
 # main (game loop)
@@ -366,6 +394,42 @@ class TestMainLoop:
 
         # No move was performed.
         assert game.turn is Team.WHITE.value or game.turn.name == "WHITE"
+
+    def test_each_call_without_game_uses_a_fresh_game(self, curs_set_patch):
+        """Regression test for the mutable-default-argument footgun.
+
+        Previously `def main(window, game: Game = Game(), ...)` shared a
+        single Game across every caller that omitted the argument, so a
+        move made in one call would leak into the next. The default is
+        now None; each call constructs its own Game.
+        """
+        window1 = make_window(
+            getch_keys=[ord("A"), ord("2"), ord("A"), ord("4"), _esc()]
+        )
+        main(window1, log_style=LogStyle.CoordinateNotation)
+
+        # If the default were a shared Game, the second call would start
+        # with white's a-pawn already moved and turn flipped to black.
+        # Drive the same opening move from a fresh game; the engine
+        # should accept it (it wouldn't if state had leaked over).
+        window2 = make_window(
+            getch_keys=[ord("A"), ord("2"), ord("A"), ord("4"), _esc()]
+        )
+        with patch.object(cli_mod, "draw_input_err") as err_mock:
+            main(window2, log_style=LogStyle.CoordinateNotation)
+
+        # No "Invalid input" / illegal-move error fired on the second
+        # call → state did not leak from the first.
+        err_mock.assert_not_called()
+
+    def test_signature_default_is_none(self):
+        """Structural guard: ensure the default isn't a Game instance
+        again. A future refactor that re-introduces `Game()` as the
+        default would silently re-bring the bug."""
+        from inspect import signature
+
+        params = signature(main).parameters
+        assert params["game"].default is None
 
     def test_completes_one_move_then_exits(self, curs_set_patch):
         # White pushes the a-pawn two squares: A2 -> A4. Then ESC.
@@ -496,3 +560,17 @@ class TestMainPromotionEndToEnd:
 
     def test_knight_promotion_is_accepted(self, curs_set_patch):
         assert self._drive("N"), "Knight promotion was filtered out"
+
+
+# ---------------------------------------------------------------------------
+# run() entrypoint
+# ---------------------------------------------------------------------------
+
+
+class TestRun:
+    def test_run_delegates_to_curses_wrapper_with_main(self):
+        from cli import run
+
+        with patch.object(cli_mod, "wrapper") as wrapper_mock:
+            run()
+            wrapper_mock.assert_called_once_with(cli_mod.main)

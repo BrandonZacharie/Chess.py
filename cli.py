@@ -263,9 +263,12 @@ def get_input(window: Window, mode: InputMode) -> List[int]:
 
 def main(
     window: Window,
-    game: Game = Game(),
+    game: Optional[Game] = None,
     log_style: LogStyle = LogStyle.CoordinateNotation,
 ):
+    if game is None:
+        game = Game()
+
     mode = InputMode.SELECT_CELL
     q1 = ""
     q2 = ""
@@ -310,7 +313,7 @@ def main(
             case InputMode.SELECT_PROM:
                 try:
                     game.promote(PIECE_NAME_TYPE_MAP[input.upper()])
-                except KeyError:
+                except KeyError:  # pragma: no cover - guarded by PROMOTION_PIECE_ORDS
                     draw_input_err(window, "Invalid input.")
                 else:
                     draw_board(window, game.board, log_style)
@@ -322,5 +325,5 @@ def run() -> None:
     wrapper(main)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     run()

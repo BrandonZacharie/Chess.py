@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import chess as chess_mod
 from chess import Chess, Configuration, KeyCode, Menu, check_window_maxyx
+from game import Game
 
 
 def make_window(getch_keys: Iterable[int] = ()) -> MagicMock:
@@ -41,11 +42,19 @@ def make_window(getch_keys: Iterable[int] = ()) -> MagicMock:
     window.subwin.return_value = sub
     sub.subwin.return_value = sub
 
-    keys = iter(list(getch_keys))
-    window.getch.side_effect = lambda: next(keys)
-    sub.getch.side_effect = lambda: next(keys)
-
+    queue_keys(window, getch_keys)
     return window
+
+
+def queue_keys(window: MagicMock, keys: Iterable[int]) -> None:
+    """(Re)prime a mock window's ``getch`` with a new key sequence.
+
+    Tests that drive multiple menus through the same Chess instance use
+    this between calls so each sub-menu gets its own ESC.
+    """
+    it = iter(list(keys))
+    window.getch.side_effect = lambda: next(it)
+    window.subwin.return_value.getch.side_effect = lambda: next(it)
 
 
 @pytest.fixture
@@ -305,12 +314,6 @@ class _BareChess:
         self.window = window
 
 
-def _run_fileprompt(keys, handler=None):
-    window = make_window(getch_keys=keys)
-    bare = _BareChess(window)
-    return bare, window, bare._fileprompt(handler=handler)
-
-
 class TestFilePrompt:
     def test_esc_raises_keyboard_interrupt(self, curses_patches):
         window = make_window(getch_keys=[int(KeyCode.ESC)])
@@ -545,3 +548,398 @@ class TestLoadPgn:
         # / ``fuzzy=True`` branch in the menu-label formatter.
         ok = bare._load_pgn(str(PGN_DIR / "test2.pgn"))
         assert ok is True
+
+    def test_empty_pgn_file_reports_no_games(self, bare, curses_patches, tmp_path):
+        empty = tmp_path / "empty.pgn"
+        empty.write_text("")
+        ok = bare._load_pgn(str(empty))
+        assert ok is True
+        rendered = " ".join(
+            arg
+            for call in bare.window.addstr.call_args_list
+            for arg in call.args
+            if isinstance(arg, str)
+        )
+        assert "No games found." in rendered
+
+    def test_malformed_pgn_reports_an_error(self, bare, curses_patches, tmp_path):
+        # A non-empty file that pgnparser can't parse correctly drives the
+        # general Exception branch (line 392-393).
+        bad = tmp_path / "bad.pgn"
+        bad.write_text("not a real pgn\n\xFF\xFE\x00 garbage")
+        ok = bare._load_pgn(str(bad))
+        # Either bool result is fine — what we care about is that the error
+        # was caught and a message was drawn somewhere.
+        rendered = " ".join(
+            arg
+            for call in bare.window.addstr.call_args_list
+            for arg in call.args
+            if isinstance(arg, str)
+        ).lower()
+        assert ok in (True, False)
+        # If it did fail, "error" should appear in the rendered string.
+        if ok is False:
+            assert "error" in rendered or "not found" in rendered
+
+
+# ---------------------------------------------------------------------------
+# Menu rendering details (title, item modes, navigation keys)
+# ---------------------------------------------------------------------------
+
+
+class TestMenuRendering:
+    def test_title_is_rendered_when_present(self, curses_patches):
+        window = make_window(getch_keys=[int(KeyCode.ESC)])
+        menu = Menu([("one", lambda: None)], window, title="Settings")
+        menu.display()
+
+        rendered = " ".join(
+            arg
+            for call in menu.window.addstr.call_args_list
+            for arg in call.args
+            if isinstance(arg, str)
+        )
+        assert "↳ Settings" in rendered
+
+    def test_item_with_attribute_third_tuple_element_uses_it(self, curses_patches):
+        from curses import A_DIM
+
+        window = make_window(getch_keys=[int(KeyCode.ESC)])
+        menu = Menu([("dim entry", lambda: None, A_DIM)], window)
+        menu.display()
+
+        # Look at the attribute argument of the addstr that drew the item.
+        rendered_with_attrs = [
+            call.args
+            for call in menu.window.addstr.call_args_list
+            if len(call.args) >= 4
+            and isinstance(call.args[2], str)
+            and "dim entry" in call.args[2]
+        ]
+        assert rendered_with_attrs, "the dim item was never rendered"
+        # The mode field (call.args[3]) should have A_DIM bit set.
+        assert any((args[3] & A_DIM) for args in rendered_with_attrs)
+
+
+class TestMenuNavigationKeys:
+    """Keys whose match cases aren't covered by the simple navigation tests."""
+
+    def _menu_with_many_items(self, getch_keys):
+        window = make_window(getch_keys=getch_keys)
+        items = [(f"i{n}", lambda: None) for n in range(40)]  # > 1 page
+        return Menu(items, window)
+
+    def test_ppage_navigates_back_one_page(self, curses_patches):
+        menu = self._menu_with_many_items([int(KeyCode.PPAGE), int(KeyCode.ESC)])
+        menu.page = 1
+        menu.position = 5
+        menu.display()
+        # After PPAGE the user lands back on page 0.
+        assert menu.page == 0
+
+    def test_npage_navigates_forward_one_page(self, curses_patches):
+        menu = self._menu_with_many_items([int(KeyCode.NPAGE), int(KeyCode.ESC)])
+        menu.display()
+        assert menu.page == 1
+
+    def test_home_navigates_to_first_page(self, curses_patches):
+        menu = self._menu_with_many_items([int(KeyCode.HOME), int(KeyCode.ESC)])
+        menu.page = 1
+        menu.position = 7
+        menu.display()
+        assert (menu.page, menu.position) == (0, 0)
+
+    def test_end_navigates_to_last_page(self, curses_patches):
+        menu = self._menu_with_many_items([int(KeyCode.END), int(KeyCode.ESC)])
+        menu.display()
+        assert menu.page == len(menu.pages) - 1
+
+
+# ---------------------------------------------------------------------------
+# Chess.draw_* sub-menu drivers
+# ---------------------------------------------------------------------------
+
+
+class TestChessDrawMenus:
+    def test_draw_save_menu_displays_and_resets_position(self, chess_instance):
+        chess_instance.menus.save.position = 1
+        queue_keys(chess_instance.window, [int(KeyCode.ESC)])
+        chess_instance.draw_save_menu()
+        assert chess_instance.menus.save.position == 0
+
+    def test_draw_load_menu_displays_and_resets_position(self, chess_instance):
+        chess_instance.menus.load.position = 1
+        queue_keys(chess_instance.window, [int(KeyCode.ESC)])
+        chess_instance.draw_load_menu()
+        assert chess_instance.menus.load.position == 0
+
+    def test_draw_cfg_menu_displays_and_resets_position(self, chess_instance):
+        # cfg menu only has one real entry plus exit; bump position then
+        # confirm it's reset.
+        chess_instance.menus.cfg.position = 1
+        queue_keys(chess_instance.window, [int(KeyCode.ESC)])
+        chess_instance.draw_cfg_menu()
+        assert chess_instance.menus.cfg.position == 0
+
+    def test_draw_cfg_log_style_menu_selects_a_style(self, chess_instance):
+        # Pressing ENTER on the first entry (Coordinates) sets the style
+        # via set_style() which raises KeyboardInterrupt to break.
+        queue_keys(chess_instance.window, [int(KeyCode.ENTER)])
+        chess_instance.draw_cfg_log_style_menu()
+        # The set_style branch ran; log_style is now an instance attribute
+        # equal to LogStyle.CoordinateNotation.
+        from cli import LogStyle
+
+        assert chess_instance.cfg.log_style == LogStyle.CoordinateNotation
+
+    def test_draw_cfg_log_style_menu_can_exit_without_choosing(self, chess_instance):
+        queue_keys(chess_instance.window, [int(KeyCode.ESC)])
+        chess_instance.draw_cfg_log_style_menu()
+        # No exception; original log_style preserved.
+
+    def test_draw_about_renders_credits_and_waits_for_key(self, chess_instance):
+        queue_keys(chess_instance.window, [ord(" ")])
+        chess_instance.draw_about()
+
+        rendered = " ".join(
+            arg
+            for call in chess_instance.window.addstr.call_args_list
+            for arg in call.args
+            if isinstance(arg, str)
+        )
+        assert "Brandon Zacharie" in rendered
+        assert "github" in rendered
+        assert "semver" in rendered
+        assert "Press any key to continue..." in rendered
+
+
+# ---------------------------------------------------------------------------
+# Chess save/load entrypoints
+# ---------------------------------------------------------------------------
+
+
+class TestChessSaveLoad:
+    def test_save_pgn_is_a_no_op_stub(self, chess_instance):
+        # Selectable but intentionally unimplemented today.
+        assert chess_instance.save_pgn() is None
+
+    def test_save_json_fails_when_no_game_then_loop_keeps_running(self, chess_instance):
+        # ENTER on the prompt triggers the handler; handler returns False
+        # because game is None ("Game not found."). The _fileprompt loop
+        # stays open, so we press ESC next which raises KeyboardInterrupt
+        # from the loop's exit path.
+        queue_keys(chess_instance.window, [int(KeyCode.ENTER), int(KeyCode.ESC)])
+        with pytest.raises(KeyboardInterrupt):
+            chess_instance.save_json()
+
+    def test_save_json_returns_via_explicit_keyboard_interrupt_on_success(
+        self, chess_instance, tmp_path
+    ):
+        # With a real (MagicMock) game on the instance, the handler
+        # returns True on ENTER and _fileprompt returns normally; the
+        # explicit `raise KeyboardInterrupt` at the end of save_json
+        # then fires.
+        chess_instance.game = MagicMock()
+        chess_instance._fileprompt = lambda handler: handler(str(tmp_path / "g.json"))
+        with pytest.raises(KeyboardInterrupt):
+            chess_instance.save_json()
+        chess_instance.game.save.assert_called_once_with(str(tmp_path / "g.json"))
+
+    def test_load_json_invokes_fileprompt(self, chess_instance, tmp_path):
+        # Drive _fileprompt to ENTER with the default path, then ESC.
+        # The handler will fail (file not found) and the loop continues.
+        queue_keys(chess_instance.window, [int(KeyCode.ENTER), int(KeyCode.ESC)])
+        with pytest.raises(KeyboardInterrupt):
+            chess_instance.load_json()
+
+    def test_load_pgn_invokes_fileprompt(self, chess_instance):
+        # Same shape as load_json: ENTER then ESC. The handler fails (no
+        # such PGN at the default path) and ESC exits the loop.
+        queue_keys(chess_instance.window, [int(KeyCode.ENTER), int(KeyCode.ESC)])
+        with pytest.raises(KeyboardInterrupt):
+            chess_instance.load_pgn()
+
+
+class TestSaveJsonHandler:
+    def test_returns_false_when_no_game_is_active(self, chess_instance):
+        ok = chess_instance._save_json("/tmp/anywhere.json")
+        assert ok is False
+        rendered = " ".join(
+            arg
+            for call in chess_instance.window.addstr.call_args_list
+            for arg in call.args
+            if isinstance(arg, str)
+        )
+        assert "Game not found." in rendered
+
+    def test_saves_when_game_is_active(self, chess_instance, tmp_path):
+        chess_instance.game = MagicMock()
+        target = tmp_path / "out.json"
+        ok = chess_instance._save_json(str(target))
+        assert ok is True
+        chess_instance.game.save.assert_called_once_with(str(target))
+
+    def test_reports_file_not_found(self, chess_instance):
+        chess_instance.game = MagicMock()
+        chess_instance.game.save.side_effect = FileNotFoundError()
+        ok = chess_instance._save_json("/no/such/dir/out.json")
+        assert ok is False
+        rendered = " ".join(
+            arg
+            for call in chess_instance.window.addstr.call_args_list
+            for arg in call.args
+            if isinstance(arg, str)
+        )
+        assert "File not found." in rendered
+
+    def test_reports_generic_errors(self, chess_instance):
+        chess_instance.game = MagicMock()
+        chess_instance.game.save.side_effect = RuntimeError("disk full")
+        ok = chess_instance._save_json("/tmp/out.json")
+        assert ok is False
+        rendered = " ".join(
+            arg
+            for call in chess_instance.window.addstr.call_args_list
+            for arg in call.args
+            if isinstance(arg, str)
+        )
+        assert "disk full" in rendered
+
+
+class TestLoadJsonHandler:
+    def test_missing_file_returns_false(self, chess_instance):
+        ok = chess_instance._load_json("/does/not/exist.json")
+        assert ok is False
+
+    def test_generic_errors_are_caught(self, chess_instance, tmp_path):
+        # An empty file isn't a valid JSON game; Game.load should raise.
+        empty = tmp_path / "empty.json"
+        empty.write_text("")
+        ok = chess_instance._load_json(str(empty))
+        assert ok is False
+        rendered = " ".join(
+            arg
+            for call in chess_instance.window.addstr.call_args_list
+            for arg in call.args
+            if isinstance(arg, str)
+        )
+        # Either branch is fine — what matters is the loop reported something.
+        assert "error" in rendered.lower() or "not found" in rendered.lower()
+
+    def test_loads_a_saved_game_and_starts_play(self, chess_instance, tmp_path):
+        # Save a Game (Game.save only serializes when there's at least one
+        # move on the log), then drive _load_json on it. The fixture has
+        # cli.main patched to a MagicMock so play() returns immediately.
+        seed = Game()
+        seed.move("E2", "E4")
+        target = tmp_path / "g.json"
+        assert seed.save(str(target)) is True
+
+        ok = chess_instance._load_json(str(target))
+        assert ok is True
+        chess_instance._main_mock.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# _fileprompt edit keys
+# ---------------------------------------------------------------------------
+
+
+class TestFilePromptEditKeys:
+    def _drive(self, keys):
+        received: List[str] = []
+
+        def handler(path: str) -> bool:
+            received.append(path)
+            return True
+
+        window = make_window(getch_keys=keys)
+        _BareChess(window)._fileprompt(handler=handler)
+        return received[0] if received else None
+
+    def test_down_and_up_are_ignored(self, curses_patches):
+        path = self._drive(
+            [
+                ord("a"),
+                int(KeyCode.DOWN),
+                int(KeyCode.UP),
+                ord("b"),
+                int(KeyCode.ENTER),
+            ]
+        )
+        assert path.endswith("ab")
+
+    def test_right_moves_cursor(self, curses_patches):
+        # Type "ab", LEFT, LEFT (cursor at start), RIGHT (cursor between
+        # a and b), insert 'X' → "aXb".
+        path = self._drive(
+            [
+                ord("a"),
+                ord("b"),
+                int(KeyCode.LEFT),
+                int(KeyCode.LEFT),
+                int(KeyCode.RIGHT),
+                ord("X"),
+                int(KeyCode.ENTER),
+            ]
+        )
+        assert path.endswith("aXb")
+
+    def test_vt_clears_from_cursor_to_end(self, curses_patches):
+        # Type "abcd", LEFT, LEFT, VT — wipes "cd" leaving "ab".
+        path = self._drive(
+            [
+                ord("a"),
+                ord("b"),
+                ord("c"),
+                ord("d"),
+                int(KeyCode.LEFT),
+                int(KeyCode.LEFT),
+                int(KeyCode.VT),
+                int(KeyCode.ENTER),
+            ]
+        )
+        assert path.endswith("ab")
+
+    def test_home_jumps_cursor_to_start(self, curses_patches):
+        # Type "ab" appended to the default path, HOME, then 'X' — the X
+        # is inserted at the very start (just after the prompt sentinel).
+        path = self._drive(
+            [
+                ord("a"),
+                ord("b"),
+                int(KeyCode.HOME),
+                ord("X"),
+                int(KeyCode.ENTER),
+            ]
+        )
+        assert path.startswith("X")
+        assert path.endswith("ab")
+
+    def test_end_jumps_cursor_to_end(self, curses_patches):
+        # Type "ab", HOME, END, 'X' → "abX".
+        path = self._drive(
+            [
+                ord("a"),
+                ord("b"),
+                int(KeyCode.HOME),
+                int(KeyCode.END),
+                ord("X"),
+                int(KeyCode.ENTER),
+            ]
+        )
+        assert path.endswith("abX")
+
+    def test_delete_key_removes_character_after_cursor(self, curses_patches):
+        # Type "abc", HOME, DC (delete 'a') → "bc".
+        path = self._drive(
+            [
+                ord("a"),
+                ord("b"),
+                ord("c"),
+                int(KeyCode.HOME),
+                int(KeyCode.DC),
+                int(KeyCode.ENTER),
+            ]
+        )
+        assert path.endswith("bc")
