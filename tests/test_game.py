@@ -734,6 +734,81 @@ def test_save_pgn_roundtrip_on_a_mate_game(tmp_path):
     assert replayed.result() == "0-1"
 
 
+def test_pgn_tags_default_to_empty_on_fresh_game():
+    game = Game()
+    assert game.pgn_tags == {}
+
+
+def test_pgn_file_captures_tags_on_load():
+    """PGNFile.game() now records the seven-tag-roster plus a few common
+    optional tags onto Game.pgn_tags so the load → save round-trip can
+    preserve them."""
+    pgn_file = PGNFile("../tests/test1.pgn")
+    game = pgn_file.game(0)
+
+    assert game.pgn_tags["Event"] == "F/S Return Match"
+    assert game.pgn_tags["Site"] == "Belgrade, Serbia Yugoslavia|JUG"
+    assert game.pgn_tags["Date"] == "1992.11.04"
+    assert game.pgn_tags["Round"] == "29"
+    assert game.pgn_tags["White"] == "Fischer, Robert J."
+    assert game.pgn_tags["Black"] == "Spassky, Boris V."
+    assert game.pgn_tags["Result"] == "1/2-1/2"
+
+
+def test_save_pgn_preserves_loaded_tags(tmp_path):
+    """Loading a PGN, saving it back, and re-loading the saved file
+    should reproduce the original seven-tag roster — the engine no
+    longer overwrites Event/Site/Date/etc. with its own defaults when
+    these are present on the source game."""
+    pgn_file = PGNFile("../tests/test1.pgn")
+    original = pgn_file.game(0)
+
+    out = tmp_path / "round-tripped.pgn"
+    assert original.save_pgn(str(out)) is True
+
+    text = out.read_text()
+    assert '[Event "F/S Return Match"]' in text
+    assert '[Site "Belgrade, Serbia Yugoslavia|JUG"]' in text
+    assert '[Date "1992.11.04"]' in text
+    assert '[Round "29"]' in text
+    assert '[White "Fischer, Robert J."]' in text
+    assert '[Black "Spassky, Boris V."]' in text
+    # The original PGN says the game ended 1/2-1/2 (resignation/draw,
+    # not on-board mate). The engine's derived result() would say '*'
+    # because no terminal position was reached, but the loaded tag
+    # takes precedence.
+    assert '[Result "1/2-1/2"]' in text
+
+
+def test_save_pgn_caller_headers_override_loaded_tags(tmp_path):
+    """The caller-supplied ``headers`` argument is the highest-priority
+    layer: defaults < loaded pgn_tags < headers."""
+    pgn_file = PGNFile("../tests/test1.pgn")
+    game = pgn_file.game(0)
+
+    out = tmp_path / "overridden.pgn"
+    game.save_pgn(str(out), headers={"Event": "Custom Event"})
+
+    text = out.read_text()
+    assert '[Event "Custom Event"]' in text
+    # Other loaded tags are still present.
+    assert '[White "Fischer, Robert J."]' in text
+
+
+def test_new_game_save_pgn_still_uses_defaults(tmp_path):
+    """Regression check: a brand-new Game (no pgn_tags) still emits the
+    Casual Game / Chess.py / today / ? defaults."""
+    game = Game()
+    game.move("E2", "E4")
+
+    out = tmp_path / "fresh.pgn"
+    game.save_pgn(str(out))
+
+    text = out.read_text()
+    assert '[Event "Casual Game"]' in text
+    assert '[White "?"]' in text
+
+
 def test_en_passant_capture_records_standard_notation_and_board_state(tmp_path):
     """En passant is one of the few special moves where the captured piece
     isn't on the destination square. The elog token is the same as a

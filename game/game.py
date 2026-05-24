@@ -85,6 +85,7 @@ class Game:
             self._last_turn = Turn.AUTO
             self._board: Optional[Board] = None
             self._handlers: Dict[str, Set[Handler]] = defaultdict(set)
+            self.pgn_tags: Dict[str, str] = {}
         else:
             self._created = game._created
             self._first_turn = game._first_turn
@@ -92,6 +93,7 @@ class Game:
             self._last_turn = game._last_turn
             self._board = game._board
             self._handlers = game._handlers
+            self.pgn_tags = dict(game.pgn_tags)
 
     @property
     def board(self) -> Board:
@@ -234,6 +236,11 @@ class Game:
             "Result": self.result(),
             "PlyCount": str(ply_count),
         }
+
+        # Tags captured when this game was loaded from a PGN file override
+        # the built-in defaults so a load -> save round-trip preserves
+        # Event / Site / Date / White / Black / Result / etc.
+        tags.update(self.pgn_tags)
 
         if headers:
             tags.update(headers)
@@ -717,11 +724,34 @@ class PGNFile(List[PGNGame]):
 
         super().__init__(pgn_loads(open(path.join(realpath, self.filename)).read()))
 
+    PGN_TAG_ATTRS = (
+        "Event",
+        "Site",
+        "Date",
+        "Round",
+        "White",
+        "Black",
+        "Result",
+        "Annotator",
+        "PlyCount",
+        "TimeControl",
+        "Time",
+        "Termination",
+        "Mode",
+    )
+
     def game(self, index: int = -1) -> Game:
         game = Game()
+        pgn_game = self[index]
+
+        for tag in self.PGN_TAG_ATTRS:
+            value = getattr(pgn_game, tag.lower(), None)
+            if value:
+                game.pgn_tags[tag] = value
+
         level = 0
 
-        for pgn_move in self[index].moves:
+        for pgn_move in pgn_game.moves:
             if pgn_move == "(":
                 level += 1
 
