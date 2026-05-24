@@ -719,9 +719,19 @@ class TestChessDrawMenus:
 
 
 class TestChessSaveLoad:
-    def test_save_pgn_is_a_no_op_stub(self, chess_instance):
-        # Selectable but intentionally unimplemented today.
-        assert chess_instance.save_pgn() is None
+    def test_save_pgn_fails_when_no_game_then_loop_keeps_running(self, chess_instance):
+        queue_keys(chess_instance.window, [int(KeyCode.ENTER), int(KeyCode.ESC)])
+        with pytest.raises(KeyboardInterrupt):
+            chess_instance.save_pgn()
+
+    def test_save_pgn_returns_via_explicit_keyboard_interrupt_on_success(
+        self, chess_instance, tmp_path
+    ):
+        chess_instance.game = MagicMock()
+        chess_instance._fileprompt = lambda handler: handler(str(tmp_path / "g.pgn"))
+        with pytest.raises(KeyboardInterrupt):
+            chess_instance.save_pgn()
+        chess_instance.game.save_pgn.assert_called_once_with(str(tmp_path / "g.pgn"))
 
     def test_save_json_fails_when_no_game_then_loop_keeps_running(self, chess_instance):
         # ENTER on the prompt triggers the handler; handler returns False
@@ -796,6 +806,52 @@ class TestSaveJsonHandler:
         chess_instance.game = MagicMock()
         chess_instance.game.save.side_effect = RuntimeError("disk full")
         ok = chess_instance._save_json("/tmp/out.json")
+        assert ok is False
+        rendered = " ".join(
+            arg
+            for call in chess_instance.window.addstr.call_args_list
+            for arg in call.args
+            if isinstance(arg, str)
+        )
+        assert "disk full" in rendered
+
+
+class TestSavePgnHandler:
+    def test_returns_false_when_no_game_is_active(self, chess_instance):
+        ok = chess_instance._save_pgn("/tmp/anywhere.pgn")
+        assert ok is False
+        rendered = " ".join(
+            arg
+            for call in chess_instance.window.addstr.call_args_list
+            for arg in call.args
+            if isinstance(arg, str)
+        )
+        assert "Game not found." in rendered
+
+    def test_saves_when_game_is_active(self, chess_instance, tmp_path):
+        chess_instance.game = MagicMock()
+        target = tmp_path / "out.pgn"
+        ok = chess_instance._save_pgn(str(target))
+        assert ok is True
+        chess_instance.game.save_pgn.assert_called_once_with(str(target))
+
+    def test_reports_file_not_found(self, chess_instance):
+        chess_instance.game = MagicMock()
+        chess_instance.game.save_pgn.side_effect = FileNotFoundError()
+        ok = chess_instance._save_pgn("/no/such/dir/out.pgn")
+        assert ok is False
+        rendered = " ".join(
+            arg
+            for call in chess_instance.window.addstr.call_args_list
+            for arg in call.args
+            if isinstance(arg, str)
+        )
+        assert "File not found." in rendered
+
+    def test_reports_generic_errors(self, chess_instance):
+        chess_instance.game = MagicMock()
+        chess_instance.game.save_pgn.side_effect = RuntimeError("disk full")
+        ok = chess_instance._save_pgn("/tmp/out.pgn")
         assert ok is False
         rendered = " ".join(
             arg

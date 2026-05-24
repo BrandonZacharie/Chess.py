@@ -491,6 +491,244 @@ def test_parse_pgn_move_with_promotion_annotation():
     assert promo == "Q"
 
 
+def test_fools_mate_is_detected_as_checkmate():
+    """Two-move mate: white's 1.f3 / 2.g4 and black plays 1...e5 / 2...Qh4#."""
+    game = Game()
+    game.move("F2", "F3")
+    game.move("E7", "E5")
+    game.move("G2", "G4")
+    game.move("D8", "H4")
+
+    assert game.turn is Turn.WHITE
+    assert game.is_in_check() is True
+    assert game.has_legal_moves() is False
+    assert game.is_checkmate() is True
+    assert game.is_stalemate() is False
+    assert game.is_game_over() is True
+    assert game.result() == "0-1"
+    # The terminal move's algebraic notation now ends in '#', not '+'.
+    last_entry = game.board.elog[-1]
+    assert last_entry[-1].endswith("#"), f"got {last_entry!r}"
+
+
+def test_sam_loyds_stalemate_is_detected():
+    """Ten-move stalemate (Sam Loyd, 1899): black is not in check but has no
+    legal move. Result is a draw."""
+    game = Game()
+    for q1, q2 in [
+        ("E2", "E3"),
+        ("A7", "A5"),
+        ("D1", "H5"),
+        ("A8", "A6"),
+        ("H5", "A5"),
+        ("H7", "H5"),
+        ("A5", "C7"),
+        ("A6", "H6"),
+        ("H2", "H4"),
+        ("F7", "F6"),
+        ("C7", "D7"),
+        ("E8", "F7"),
+        ("D7", "B7"),
+        ("D8", "D3"),
+        ("B7", "B8"),
+        ("D3", "H7"),
+        ("B8", "C8"),
+        ("F7", "G6"),
+        ("C8", "E6"),
+    ]:
+        game.move(q1, q2)
+
+    assert game.turn is Turn.BLACK
+    assert game.is_in_check() is False
+    assert game.has_legal_moves() is False
+    assert game.is_stalemate() is True
+    assert game.is_checkmate() is False
+    assert game.is_game_over() is True
+    assert game.result() == "1/2-1/2"
+
+
+def test_starting_position_has_legal_moves_and_no_terminal_state():
+    game = Game()
+    assert game.is_in_check() is False
+    assert game.has_legal_moves() is True
+    assert game.is_checkmate() is False
+    assert game.is_stalemate() is False
+    assert game.is_game_over() is False
+    assert game.result() == "*"
+
+
+def test_check_without_mate_still_returns_star():
+    """1.e4 d5 2.exd5 Qxd5 3.Nc3 Qe5+ — white is in check from the queen on
+    the e-file but has multiple legal blocks (Be2, Ne2), so the game is
+    not over and the result is '*'."""
+    game = Game()
+    for q1, q2 in [
+        ("E2", "E4"),
+        ("D7", "D5"),
+        ("E4", "D5"),
+        ("D8", "D5"),
+        ("B1", "C3"),
+        ("D5", "E5"),
+    ]:
+        game.move(q1, q2)
+
+    assert game.is_in_check() is True
+    assert game.has_legal_moves() is True
+    assert game.is_checkmate() is False
+    assert game.result() == "*"
+    # The check annotation was applied; mate annotation was not.
+    last_move = game.board.elog[-1][-1]
+    assert last_move.endswith("+")
+    assert not last_move.endswith("#")
+
+
+def test_save_pgn_writes_seven_tag_roster_plus_plycount(tmp_path):
+    game = Game()
+    game.move("E2", "E4")
+    game.move("E7", "E5")
+    out = tmp_path / "g.pgn"
+
+    assert game.save_pgn(str(out)) is True
+
+    text = out.read_text()
+    for tag in ("Event", "Site", "Date", "Round", "White", "Black", "Result"):
+        assert f"[{tag} " in text, f"missing tag: {tag}"
+    assert '[PlyCount "2"]' in text
+
+
+def test_save_pgn_result_reflects_game_state(tmp_path):
+    in_progress = Game()
+    in_progress.move("E2", "E4")
+    out = tmp_path / "ip.pgn"
+    in_progress.save_pgn(str(out))
+    assert '[Result "*"]' in out.read_text()
+
+    mate = Game()
+    mate.move("F2", "F3")
+    mate.move("E7", "E5")
+    mate.move("G2", "G4")
+    mate.move("D8", "H4")
+    mate_out = tmp_path / "mate.pgn"
+    mate.save_pgn(str(mate_out))
+    assert '[Result "0-1"]' in mate_out.read_text()
+
+
+def test_save_pgn_headers_can_be_overridden(tmp_path):
+    game = Game()
+    game.move("E2", "E4")
+    out = tmp_path / "g.pgn"
+    game.save_pgn(
+        str(out),
+        headers={"Event": "Test Match", "White": "Alice", "Black": "Bob"},
+    )
+
+    text = out.read_text()
+    assert '[Event "Test Match"]' in text
+    assert '[White "Alice"]' in text
+    assert '[Black "Bob"]' in text
+    # Unspecified tags still get defaults.
+    assert "[Site " in text
+
+
+def test_save_pgn_wraps_long_movetext_under_80_chars(tmp_path):
+    """The PGN spec recommends keeping movetext lines under 80 characters.
+    A long opening overflows the first line and should wrap to the next."""
+    game = Game()
+    for q1, q2 in [
+        ("E2", "E4"),
+        ("E7", "E5"),
+        ("G1", "F3"),
+        ("B8", "C6"),
+        ("F1", "B5"),
+        ("A7", "A6"),
+        ("B5", "A4"),
+        ("G8", "F6"),
+        ("E1", "G1"),
+        ("F8", "E7"),
+        ("F1", "E1"),
+        ("B7", "B5"),
+        ("A4", "B3"),
+        ("D7", "D6"),
+        ("C2", "C3"),
+        ("E8", "G8"),
+        ("H2", "H3"),
+        ("C6", "A5"),
+        ("B3", "C2"),
+        ("C7", "C5"),
+        ("D2", "D4"),
+        ("D8", "C7"),
+    ]:
+        game.move(q1, q2)
+    out = tmp_path / "long.pgn"
+    game.save_pgn(str(out))
+
+    # Movetext starts after the blank line between tags and body.
+    text = out.read_text()
+    body = text.split("\n\n", 1)[1]
+    movetext_lines = [line for line in body.splitlines() if line]
+    assert (
+        len(movetext_lines) > 1
+    ), f"expected wrapped movetext, got single line: {body!r}"
+    for line in movetext_lines:
+        assert len(line) <= 80, f"line too long ({len(line)}): {line!r}"
+
+
+def test_save_pgn_movetext_contains_the_log(tmp_path):
+    game = Game()
+    game.move("E2", "E4")
+    game.move("E7", "E5")
+    game.move("G1", "F3")
+    out = tmp_path / "g.pgn"
+    game.save_pgn(str(out))
+
+    text = out.read_text()
+    assert "1." in text
+    assert "e4" in text
+    assert "e5" in text
+    assert "Nf3" in text
+
+
+def test_save_pgn_roundtrip_through_pgn_file(tmp_path):
+    """A game saved as PGN can be replayed by ``PGNFile.game`` and reach
+    the same engine state (same elog moves)."""
+    original = Game()
+    for q1, q2 in [
+        ("E2", "E4"),
+        ("E7", "E5"),
+        ("G1", "F3"),
+        ("B8", "C6"),
+        ("F1", "B5"),
+    ]:
+        original.move(q1, q2)
+    out = tmp_path / "g.pgn"
+    original.save_pgn(str(out))
+
+    pgn_file = PGNFile(str(out))
+    replayed = pgn_file.game(0)
+
+    original_moves = [m for entry in original.board.elog for m in entry[1:]]
+    replayed_moves = [m for entry in replayed.board.elog for m in entry[1:]]
+    assert replayed_moves == original_moves
+
+
+def test_save_pgn_roundtrip_on_a_mate_game(tmp_path):
+    """Fool's mate saved and reloaded preserves the mate annotation
+    after `parse_pgn_move` learns to strip '#'."""
+    original = Game()
+    original.move("F2", "F3")
+    original.move("E7", "E5")
+    original.move("G2", "G4")
+    original.move("D8", "H4")
+    out = tmp_path / "mate.pgn"
+    original.save_pgn(str(out))
+
+    pgn_file = PGNFile(str(out))
+    replayed = pgn_file.game(0)
+
+    assert replayed.is_checkmate() is True
+    assert replayed.result() == "0-1"
+
+
 def test_pgn_file_replays_a_promotion(tmp_path):
     """Drives PGNFile.game() through a small PGN that ends in a queen
     promotion, covering the engine's automatic promote() callback."""
