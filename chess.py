@@ -1,7 +1,6 @@
 from curses import (
     A_BOLD,
     A_COLOR,
-    A_DIM,
     A_NORMAL,
     A_REVERSE,
     KEY_BACKSPACE,
@@ -249,7 +248,7 @@ class Chess(object):
             )
             save = Menu(
                 [
-                    ("PGN", self.save_pgn, A_DIM),
+                    ("PGN", self.save_pgn),
                     ("JSON", self.save_json),
                 ],
                 window,
@@ -334,7 +333,9 @@ class Chess(object):
         self.menus.root.position = 0
 
     def save_pgn(self):
-        pass
+        self._fileprompt(handler=self._save_pgn)
+
+        raise KeyboardInterrupt
 
     def save_json(self):
         self._fileprompt(handler=self._save_json)
@@ -356,6 +357,24 @@ class Chess(object):
         else:
             try:
                 self.game.save(filename)
+
+                return True
+            except FileNotFoundError:
+                self.window.addstr(y + 2, x, "File not found.", A_COLOR)
+            except Exception as e:
+                self.window.addstr(y + 2, x, f"Error: {e}", A_COLOR)
+
+        return False
+
+    def _save_pgn(self, filename: str) -> bool:
+        x = 5
+        y = 6
+
+        if self.game is None:
+            self.window.addstr(y + 2, x, "Game not found.", A_COLOR)
+        else:
+            try:
+                self.game.save_pgn(filename)
 
                 return True
             except FileNotFoundError:
