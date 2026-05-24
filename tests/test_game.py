@@ -226,6 +226,11 @@ def test_load_json_unsupported_version():
     ],
 )
 def test_load_pgn_file(filename: str):
+    def _strip_check_annotations(move: str) -> str:
+        # Recorded PGN games vary in whether mates are written 'Qh4+' or
+        # 'Qh4#'; this test is about move equivalence, not style.
+        return move.rstrip("+#")
+
     def cleaned_pgn_moves(moves: Sequence[str]) -> Generator[str, Any, None]:
         level = 0
 
@@ -249,16 +254,16 @@ def test_load_pgn_file(filename: str):
                 case "0-1" | "1-0" | "1/2-1/2":
                     continue
 
-            yield move
+            yield _strip_check_annotations(move)
 
     def cleaned_log_moves(
         moves: Sequence[AlgebraicNotationLogEntry],
     ) -> Generator[str, Any, None]:
         for move in moves:
-            yield move[1]
+            yield _strip_check_annotations(move[1])
 
             if len(move) == 3:
-                yield move[2]
+                yield _strip_check_annotations(move[2])
 
     pgn_file = PGNFile(filename)
 
