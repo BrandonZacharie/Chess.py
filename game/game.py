@@ -570,17 +570,17 @@ class Game:
         elog_entry = self.board.elog[-1]
 
         def annotate(elog_move: str) -> str:
-            """Add promotion notation and move check notation to the end if present."""
+            """Append '=PIECE' and re-derive the check/mate annotation
+            from the post-promotion board state. Any '+' / '#' that
+            move() left on the token is stripped first so the marker
+            always lands after the promotion suffix."""
+            base = elog_move.rstrip("+#")
+            annotated = f"{base}={piece_name}"
 
-            return (
-                f"{elog_move[:-1]}={piece_name}+"
-                if elog_move[-1] == "+"
-                else (
-                    f"{elog_move}={piece_name}+"
-                    if not self.board.get_king(cell.piece.team.opponent).is_safe
-                    else f"{elog_move}={piece_name}"
-                )
-            )
+            if not self.board.get_king(cell.piece.team.opponent).is_safe:
+                annotated += "#" if not self.has_legal_moves() else "+"
+
+            return annotated
 
         self.board.elog[-1] = (
             (elog_entry[0], annotate(elog_entry[1]))
