@@ -734,6 +734,49 @@ def test_save_pgn_roundtrip_on_a_mate_game(tmp_path):
     assert replayed.result() == "0-1"
 
 
+def test_en_passant_capture_records_standard_notation_and_board_state(tmp_path):
+    """En passant is one of the few special moves where the captured piece
+    isn't on the destination square. The elog token is the same as a
+    regular pawn capture ('exd6'), the captured pawn is cleared from its
+    actual square, and the capturing pawn lands on the diagonal target.
+    Both JSON and PGN save/load round-trip the move."""
+    game = Game()
+    # 1. e4 a6 2. e5 d5 — now white can capture en passant on d6.
+    game.move("E2", "E4")
+    game.move("A7", "A6")
+    game.move("E4", "E5")
+    game.move("D7", "D5")
+    game.move("E5", "D6")
+
+    # elog uses standard pawn-capture notation.
+    assert game.board.elog[-1][-1] == "exd6"
+
+    # Board state: the black pawn that was on d5 is gone, the white pawn is on d6.
+    assert game.cell("D5").piece is None
+    assert game.cell("D6").piece is not None
+    assert game.cell("D6").piece.name == "Pawn"
+    assert game.cell("D6").piece.team is Team.WHITE
+
+    # JSON round-trip.
+    json_path = tmp_path / "ep.json"
+    assert game.save(str(json_path)) is True
+    reloaded = Game()
+    reloaded.load(str(json_path))
+    assert reloaded.board.elog == game.board.elog
+    assert reloaded.cell("D5").piece is None
+    assert reloaded.cell("D6").piece is not None
+
+    # PGN round-trip via PGNFile.
+    pgn_path = tmp_path / "ep.pgn"
+    assert game.save_pgn(str(pgn_path)) is True
+    pgn_replayed = PGNFile(str(pgn_path)).game(0)
+    replayed_moves = [m for entry in pgn_replayed.board.elog for m in entry[1:]]
+    original_moves = [m for entry in game.board.elog for m in entry[1:]]
+    assert replayed_moves == original_moves
+    assert pgn_replayed.cell("D5").piece is None
+    assert pgn_replayed.cell("D6").piece is not None
+
+
 def test_pgn_file_replays_a_promotion(tmp_path):
     """Drives PGNFile.game() through a small PGN that ends in a queen
     promotion, covering the engine's automatic promote() callback."""

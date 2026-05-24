@@ -498,8 +498,12 @@ class Game:
                         if main_move.taken_piece is None
                         else f"{cell1.name[0]}x".lower()
                     )
-
-                    # TODO: Append annotation for En passant take.
+                    # En passant uses the same algebraic notation as a
+                    # regular pawn capture ("exd6") per PGN spec; the
+                    # branch above already handles it because
+                    # Move.perform() sets ``taken_piece`` from
+                    # ``taken_cell``, which for en passant is the
+                    # captured pawn's actual square (not the destination).
                 else:
                     elog_move = PIECE_TYPE_NAME_MAP[t]
 
