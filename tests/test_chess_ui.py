@@ -318,10 +318,7 @@ class TestConfiguration:
         Configuration(filepath)
 
         assert filepath.exists()
-        assert (
-            filepath.read_text()
-            == f"log_style={LogStyle.CoordinateNotation.name}"
-        )
+        assert filepath.read_text() == f"log_style={LogStyle.CoordinateNotation.name}"
 
     def test_existing_file_is_loaded(self, tmp_path):
         from interface.game import LogStyle

@@ -33,9 +33,7 @@ def draw_head(window: Window):
     window.addstr(2, 5, " Chess.py ", A_BOLD | A_UNDERLINE)
 
 
-def draw_breadcrumbs(
-    window: Window, coordinates: Tuple[int, int], *breadcrumbs: str
-):
+def draw_breadcrumbs(window: Window, coordinates: Tuple[int, int], *breadcrumbs: str):
     x, y = coordinates
 
     window.addstr(y, x, "↳ " + " 〉".join(breadcrumbs))
