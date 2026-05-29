@@ -21,7 +21,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import chess as chess_mod
-from chess import Chess, Configuration, KeyCode, Menu, check_window_maxyx
+from chess import Chess, Configuration
+from interface.draw import check_window_maxyx
+from interface.input import KeyCode
+from interface.menu import Menu
 from game import Game
 
 
@@ -57,19 +60,32 @@ def queue_keys(window: MagicMock, keys: Iterable[int]) -> None:
     window.subwin.return_value.getch.side_effect = lambda: next(it)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_chessrc(tmp_path, monkeypatch):
+    """Redirect Configuration's default ~/.chessrc into a per-test tmp_path
+    so tests never read from or write to the real user home directory.
+    """
+    monkeypatch.setattr(chess_mod.Path, "home", lambda: tmp_path)
+
+
 @pytest.fixture
 def curses_patches():
-    """Patch module-level curses helpers used by chess.py."""
+    """Patch module-level curses helpers used by the interface package."""
+    import interface.menu as menu_mod
+    import interface.input as input_mod
+
     with (
-        patch.object(chess_mod, "panel") as panel_mock,
-        patch.object(chess_mod, "doupdate") as doupdate_mock,
-        patch.object(chess_mod, "curs_set") as curs_set_mock,
+        patch.object(menu_mod, "panel") as panel_mock,
+        patch.object(menu_mod, "doupdate") as doupdate_mock,
+        patch.object(menu_mod, "curs_set") as curs_set_menu_mock,
+        patch.object(input_mod, "curs_set") as curs_set_input_mock,
     ):
         panel_mock.new_panel.side_effect = lambda *_a, **_kw: MagicMock(name="panel")
         yield {
             "panel": panel_mock,
             "doupdate": doupdate_mock,
-            "curs_set": curs_set_mock,
+            "curs_set": curs_set_menu_mock,
+            "curs_set_input": curs_set_input_mock,
         }
 
 
@@ -288,10 +304,42 @@ class TestMenuDisplay:
 
 class TestConfiguration:
     def test_default_log_style(self):
-        from cli import LogStyle
+        from interface.game import LogStyle
 
         cfg = Configuration()
         assert cfg.log_style is LogStyle.CoordinateNotation
+
+    def test_first_creation_writes_default_to_disk(self, tmp_path):
+        from interface.game import LogStyle
+
+        filepath = tmp_path / ".chessrc"
+        assert not filepath.exists()
+
+        Configuration(filepath)
+
+        assert filepath.exists()
+        assert filepath.read_text() == f"log_style={LogStyle.CoordinateNotation.name}"
+
+    def test_existing_file_is_loaded(self, tmp_path):
+        from interface.game import LogStyle
+
+        filepath = tmp_path / ".chessrc"
+        filepath.write_text(f"log_style={LogStyle.AlgebraicNotation.name}")
+
+        cfg = Configuration(filepath)
+
+        assert cfg.log_style is LogStyle.AlgebraicNotation
+
+    def test_setting_log_style_persists_to_disk(self, tmp_path):
+        from interface.game import LogStyle
+
+        filepath = tmp_path / ".chessrc"
+        cfg = Configuration(filepath)
+
+        cfg.log_style = LogStyle.AlgebraicNotation
+
+        # Round-trip: a fresh Configuration sees the change.
+        assert Configuration(filepath).log_style is LogStyle.AlgebraicNotation
 
 
 # ---------------------------------------------------------------------------
@@ -477,9 +525,9 @@ class TestChessPlay:
 
         labels = [item[0] for item in chess_instance.menus.root.items]
         assert labels[0] == "continue…"
-        assert "save file" in labels
-        # "save file" should land at index 2 (after continue + new game).
-        assert labels.index("save file") == 2
+        assert "save game" in labels
+        # "save game" should land at index 2 (after continue + new game).
+        assert labels.index("save game") == 2
 
     def test_second_play_does_not_duplicate_entries(self, chess_instance):
         chess_instance.play()
@@ -490,7 +538,7 @@ class TestChessPlay:
 
         assert second_labels == first_labels
         assert second_labels.count("continue…") == 1
-        assert second_labels.count("save file") == 1
+        assert second_labels.count("save game") == 1
 
     def test_play_invokes_main_with_game_and_log_style(self, chess_instance):
         chess_instance.play()
@@ -590,7 +638,7 @@ class TestLoadPgn:
 class TestMenuRendering:
     def test_title_is_rendered_when_present(self, curses_patches):
         window = make_window(getch_keys=[int(KeyCode.ESC)])
-        menu = Menu([("one", lambda: None)], window, title="Settings")
+        menu = Menu([("one", lambda: None)], window, title=("Settings",))
         menu.display()
 
         rendered = " ".join(
@@ -688,7 +736,7 @@ class TestChessDrawMenus:
         chess_instance.draw_cfg_log_style_menu()
         # The set_style branch ran; log_style is now an instance attribute
         # equal to LogStyle.CoordinateNotation.
-        from cli import LogStyle
+        from interface.game import LogStyle
 
         assert chess_instance.cfg.log_style == LogStyle.CoordinateNotation
 
@@ -710,7 +758,7 @@ class TestChessDrawMenus:
         assert "Brandon Zacharie" in rendered
         assert "github" in rendered
         assert "semver" in rendered
-        assert "Press any key to continue..." in rendered
+        assert "Press any key to continue…" in rendered
 
 
 # ---------------------------------------------------------------------------

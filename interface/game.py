@@ -1,4 +1,4 @@
-from curses import A_BOLD, A_UNDERLINE, curs_set, wrapper
+from curses import A_BOLD, curs_set, wrapper
 from curses.ascii import ESC
 from curses import window as Window
 from enum import IntEnum
@@ -8,6 +8,8 @@ from typing import List, Optional, Tuple, cast
 from game import PIECE_NAME_TYPE_MAP, Board, Game, Team
 from game.board import LogEvent, LogMove
 from game.error import IllegalMoveError
+
+from .draw import draw_head
 
 BOARD_CELL_ORDS = [ord(ch) for ch in "12345678ABCDEFGHabcdefgh"]
 PROMOTION_PIECE_ORDS = [ord(ch) for ch in "QqRrBbNn"]
@@ -23,10 +25,6 @@ class InputMode(IntEnum):
     SELECT_CELL = 1
     SELECT_DEST = 2
     SELECT_PROM = 3
-
-
-def draw_head(window: Window):
-    window.addstr(2, 5, " Chess.py ", A_BOLD | A_UNDERLINE)
 
 
 def draw_board(window: Window, board: Board, log_style: LogStyle):
